@@ -10,7 +10,8 @@
     "sync": "node src/scripts/sync-calendars.js",
     "init-db": "node -e \"import('./src/db.js').then(()=>console.log('db ready'))\"",
     "digest": "node src/scripts/run-digest.js",
-    "seed": "node src/scripts/seed-activities.js && node src/scripts/seed-briefing-topics.js"
+    "seed": "node src/scripts/seed-activities.js && node src/scripts/seed-briefing-topics.js && node src/scripts/seed-life-os.js",
+    "seed:lifeos": "node src/scripts/seed-life-os.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

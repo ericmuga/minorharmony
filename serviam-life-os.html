@@ -1,0 +1,505 @@
+<!--
+  SERVIAM — Plan of Life & Life OS  (working prototype / seed)
+  Single-file Vue 3 app. This is meant to BE the seed of your real Vue project:
+  later you split it into Vite components and point the API calls at your Node backend.
+
+  - Persistence: window.storage (works inside Claude). Swap for your Node/MySQL API in production.
+  - AI Counsel: calls the Anthropic API live. In production, proxy this through your Node
+    server so your API key is never in the browser.
+  Rename freely. "Serviam" = "I will serve" — a working title, yours to change.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Spectral:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.prod.min.js"></script>
+
+<style>
+  :root{
+    --paper:#f4eee0; --paper-2:#efe7d4; --ink:#2a2620; --ink-soft:#5b5448;
+    --line:#d8ccb2; --line-soft:#e3d9c3;
+    --ox:#742a2a; --ox-deep:#5b2020; --gold:#9a7a2e; --sage:#52614f;
+    --shadow:0 1px 2px rgba(42,38,32,.06), 0 8px 30px rgba(42,38,32,.07);
+    --serif:'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    --body:'Spectral', Georgia, serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  body{
+    background-image:
+      radial-gradient(circle at 18% -10%, rgba(154,122,46,.06), transparent 40%),
+      radial-gradient(circle at 110% 0%, rgba(116,42,42,.05), transparent 35%);
+    min-height:100vh;
+  }
+  #app{max-width:860px;margin:0 auto;padding:0 18px 120px}
+  a{color:var(--ox)}
+  .muted{color:var(--ink-soft)}
+  .small{font-size:13px}
+
+  /* Header */
+  header.top{padding:26px 4px 14px;border-bottom:1px solid var(--line);margin-bottom:18px}
+  .brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .brand h1{font-family:var(--serif);font-weight:600;font-size:34px;letter-spacing:.5px;margin:0;line-height:1}
+  .brand .tag{font-family:var(--serif);font-style:italic;color:var(--ox);font-size:18px}
+  .datestrip{margin-top:6px;color:var(--ink-soft);font-size:14px}
+  .motto{font-family:var(--serif);font-style:italic;color:var(--gold);font-size:15px;margin-top:2px}
+
+  /* Nav */
+  nav{display:flex;gap:4px;flex-wrap:wrap;margin:14px 0 22px;position:sticky;top:0;z-index:30;
+      background:linear-gradient(var(--paper) 78%, transparent);padding:8px 0}
+  nav button{font-family:var(--serif);font-size:17px;border:0;background:transparent;color:var(--ink-soft);
+      padding:6px 12px;border-radius:8px;cursor:pointer;transition:.15s}
+  nav button:hover{color:var(--ink)}
+  nav button.on{background:var(--ox);color:#f7f1e3;box-shadow:var(--shadow)}
+
+  /* Cards */
+  .card{background:linear-gradient(180deg,#fbf7ec,#f6f0e1);border:1px solid var(--line-soft);
+        border-radius:14px;padding:18px 18px;box-shadow:var(--shadow);margin-bottom:16px}
+  .card h2{font-family:var(--serif);font-weight:600;font-size:23px;margin:.1em 0 .35em}
+  .card h3{font-family:var(--serif);font-weight:600;font-size:18px;margin:.2em 0 .5em;color:var(--ox-deep)}
+  .sectlabel{font-family:var(--serif);font-style:italic;color:var(--gold);font-size:15px;margin:18px 0 6px}
+  .divider{height:1px;background:var(--line-soft);margin:14px 0}
+
+  /* checkable rows */
+  .row{display:flex;align-items:flex-start;gap:11px;padding:8px 6px;border-radius:9px}
+  .row:hover{background:rgba(154,122,46,.06)}
+  .tick{flex:0 0 auto;width:22px;height:22px;border:1.5px solid var(--ox);border-radius:6px;margin-top:1px;
+        cursor:pointer;display:grid;place-items:center;color:transparent;transition:.12s;font-size:14px;background:transparent}
+  .tick.done{background:var(--ox);color:#f7f1e3;border-color:var(--ox)}
+  .rowtext{flex:1;line-height:1.35}
+  .rowtext .sub{font-size:12.5px;color:var(--ink-soft)}
+  .done .rowtext .main{text-decoration:line-through;color:var(--ink-soft)}
+  .cad{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);border:1px solid var(--line);
+       border-radius:20px;padding:1px 8px;margin-left:6px;white-space:nowrap}
+
+  /* inputs / buttons */
+  input[type=text], textarea, select{width:100%;font-family:var(--body);font-size:15px;color:var(--ink);
+      background:#fdfaf2;border:1px solid var(--line);border-radius:9px;padding:9px 11px}
+  textarea{resize:vertical;min-height:74px;line-height:1.45}
+  .btn{font-family:var(--serif);font-size:16px;border:0;border-radius:9px;padding:8px 16px;cursor:pointer;
+       background:var(--ox);color:#f7f1e3;box-shadow:var(--shadow)}
+  .btn.ghost{background:transparent;color:var(--ox);border:1px solid var(--ox)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .addbar{display:flex;gap:8px;margin-top:10px}
+
+  /* streak chip + progress */
+  .chip{display:inline-flex;align-items:center;gap:7px;background:#fbf3e0;border:1px solid var(--line);
+        border-radius:30px;padding:4px 13px;font-family:var(--serif);font-size:16px;color:var(--ox-deep)}
+  .flame{font-size:15px}
+  .bar{height:7px;background:var(--line-soft);border-radius:6px;overflow:hidden;margin-top:7px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--ox));border-radius:6px;transition:width .4s}
+
+  /* domains */
+  .domain{border:1px solid var(--line-soft);border-radius:12px;margin-bottom:12px;overflow:hidden;background:#fbf7ec}
+  .domain.foundation{border-color:var(--gold);box-shadow:0 0 0 1px rgba(154,122,46,.25), var(--shadow)}
+  .dhead{display:flex;align-items:center;gap:11px;padding:12px 14px;cursor:pointer}
+  .dico{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--ox);color:#f7f1e3;
+        font-family:var(--serif);font-size:18px;flex:0 0 auto}
+  .foundation .dico{background:var(--gold)}
+  .dhead .dn{font-family:var(--serif);font-size:21px;flex:1}
+  .dbody{padding:2px 14px 14px}
+  .goal{padding:8px 4px;border-top:1px dashed var(--line-soft)}
+  .goal .why{font-size:13px;color:var(--ink-soft);font-style:italic}
+  .pill{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#f7f1e3;background:var(--sage);
+        border-radius:20px;padding:1px 9px;margin-left:6px}
+  .pill.now{background:var(--ox)} .pill.soon{background:var(--gold)}
+
+  /* counsel */
+  .ai-out{background:#fffdf6;border:1px solid var(--line);border-left:3px solid var(--ox);border-radius:9px;
+          padding:14px 15px;margin-top:12px;white-space:pre-wrap;line-height:1.55;font-size:15px}
+  .ai-note{font-size:12.5px;color:var(--ink-soft);margin-top:8px}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--ox);
+        border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  .lib .row{align-items:center}
+  .lib .meta{font-size:12.5px;color:var(--ink-soft)}
+  .state{font-family:var(--serif);font-size:14px;color:var(--ox);cursor:pointer;border:1px solid var(--line);
+         border-radius:20px;padding:2px 11px;background:#fbf3e0;white-space:nowrap}
+  .person .nm{font-family:var(--serif);font-size:18px}
+  .delx{margin-left:auto;border:0;background:transparent;color:var(--line);cursor:pointer;font-size:18px}
+  .row:hover .delx{color:var(--ox)}
+  footer{text-align:center;color:var(--ink-soft);font-size:12.5px;margin-top:26px;font-style:italic;font-family:var(--serif)}
+</style>
+
+<div id="app" v-cloak>
+  <header class="top">
+    <div class="brand">
+      <h1>Serviam</h1>
+      <span class="tag">— plan of life &amp; life OS</span>
+    </div>
+    <div class="datestrip">{{ prettyDate }}</div>
+    <div class="motto">“Sanctify your work, sanctify yourself in your work, sanctify others through your work.”</div>
+  </header>
+
+  <nav>
+    <button v-for="t in tabs" :key="t.id" :class="{on:view===t.id}" @click="view=t.id">{{ t.label }}</button>
+  </nav>
+
+  <!-- ===================== TODAY ===================== -->
+  <section v-if="view==='today'">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">The Plan of Life</h2>
+        <span class="chip"><span class="flame">🔥</span> {{ planStreak }} day{{ planStreak===1?'':'s' }} kept</span>
+      </div>
+      <p class="muted small" style="margin:.2em 0 .6em">The norms first. Everything else compounds off the interior life — so this is the foundation, not a to‑do list.</p>
+      <div class="bar"><i :style="{width: planPct + '%'}"></i></div>
+      <p class="small muted" style="margin:6px 0 2px">{{ doneToday }} of {{ dailyNorms.length }} daily norms today</p>
+
+      <div class="sectlabel">Daily</div>
+      <div v-for="n in dailyNorms" :key="n.id" class="row" :class="{done:isNorm(n.id)}">
+        <button class="tick" :class="{done:isNorm(n.id)}" @click="toggleNorm(n.id)">✓</button>
+        <div class="rowtext"><span class="main">{{ n.name }}</span>
+          <div class="sub" v-if="n.sub">{{ n.sub }}</div></div>
+      </div>
+
+      <div class="sectlabel">Weekly &amp; beyond</div>
+      <div v-for="n in rhythmNorms" :key="n.id" class="row" :class="{done:isNorm(n.id)}">
+        <button class="tick" :class="{done:isNorm(n.id)}" @click="toggleNorm(n.id)">✓</button>
+        <div class="rowtext"><span class="main">{{ n.name }}<span class="cad">{{ n.cadence }}</span></span>
+          <div class="sub" v-if="n.sub">{{ n.sub }}</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Today's bricks</h2>
+      <p class="muted small" style="margin:.1em 0 .6em">The brick &amp; mortar — small, concrete acts that build the goals. Three is plenty.</p>
+      <div v-if="todaysBricks.length===0" class="muted small" style="padding:6px 4px">No bricks yet. Add one below.</div>
+      <div v-for="b in todaysBricks" :key="b.id" class="row" :class="{done:b.done}">
+        <button class="tick" :class="{done:b.done}" @click="b.done=!b.done;save()">✓</button>
+        <div class="rowtext"><span class="main">{{ b.title }}</span>
+          <div class="sub" v-if="b.domain">{{ b.domain }}</div></div>
+        <button class="delx" @click="delBrick(b.id)">×</button>
+      </div>
+      <div class="addbar">
+        <input type="text" v-model="newBrick" placeholder="e.g. Move 30k to the house fund · call Fr. for direction" @keyup.enter="addBrick">
+        <button class="btn" @click="addBrick">Add</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Nightly examen</h2>
+      <p class="muted small" style="margin:.1em 0 .6em">A short examination of conscience before bed. Honest, brief, hopeful.</p>
+      <div class="sectlabel" style="margin-top:6px">What am I grateful for today?</div>
+      <textarea v-model="examenDraft.gratitude" placeholder="A grace, a small mercy…"></textarea>
+      <div class="sectlabel">Where did I fight well? Where did I fall?</div>
+      <textarea v-model="examenDraft.struggle" placeholder="The custody of the heart, the spending, patience with the children…"></textarea>
+      <div class="sectlabel">One resolution for tomorrow</div>
+      <input type="text" v-model="examenDraft.resolution" placeholder="One small, specific thing.">
+      <div style="margin-top:10px"><button class="btn" @click="saveExamen">Close the day</button>
+        <span class="small muted" v-if="examenSavedMsg" style="margin-left:10px">{{ examenSavedMsg }}</span></div>
+    </div>
+  </section>
+
+  <!-- ===================== GOALS ===================== -->
+  <section v-if="view==='goals'">
+    <div class="card">
+      <h2>One life, many spheres</h2>
+      <p class="muted small">Unity of life: these aren't seven competing priorities — they're one life ordered toward one end. Spirituality is the foundation the rest is built on, so it sits first.</p>
+    </div>
+    <div v-for="d in domains" :key="d.id" class="domain" :class="{foundation:d.foundation}">
+      <div class="dhead" @click="d.open=!d.open">
+        <div class="dico">{{ d.glyph }}</div>
+        <div class="dn">{{ d.name }} <span v-if="d.foundation" class="pill soon" style="background:var(--gold)">foundation</span></div>
+        <div class="muted small">{{ d.goals.length }} goal{{ d.goals.length===1?'':'s' }} ▾</div>
+      </div>
+      <div class="dbody" v-show="d.open">
+        <div v-for="(g,i) in d.goals" :key="i" class="goal">
+          <div>{{ g.title }}
+            <span v-if="g.horizon" class="pill" :class="g.horizon">{{ g.horizon==='now'?'this year':g.horizon==='soon'?'next':'horizon' }}</span>
+          </div>
+          <div class="why" v-if="g.why">{{ g.why }}</div>
+        </div>
+        <div class="addbar">
+          <input type="text" v-model="newGoal[d.id]" placeholder="Add a goal…" @keyup.enter="addGoal(d)">
+          <button class="btn ghost" @click="addGoal(d)">+</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== THE STRUGGLE ===================== -->
+  <section v-if="view==='struggle'">
+    <div class="card">
+      <h2>The particular examen</h2>
+      <p class="muted small">Opus Dei's instrument for real change: don't fight every fault at once. Choose <em>one</em> battle for a season, win it daily, then move to the next. This is also your "stop doing" list — but framed as growth in a virtue, because that is what lasts.</p>
+    </div>
+    <div v-for="s in struggles" :key="s.id" class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">{{ s.title }}</h3>
+        <span class="chip"><span class="flame">🔥</span> {{ struggleStreak(s.id) }} day streak</span>
+      </div>
+      <p class="muted small" v-if="s.note" style="margin:.3em 0">{{ s.note }}</p>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn" :class="{ghost: keptToday(s.id)!=='kept'}" @click="setStruggle(s.id,'kept')">Kept custody today</button>
+        <button class="btn ghost" :class="{on: keptToday(s.id)==='fell'}" @click="setStruggle(s.id,'fell')"
+          :style="keptToday(s.id)==='fell' ? 'background:var(--ox);color:#f7f1e3':''">Fell — begin again</button>
+      </div>
+      <p class="small muted" style="margin-top:8px;font-style:italic" v-if="keptToday(s.id)==='fell'">“To begin again” — the saint's phrase. A fall logged honestly is worth more than a streak kept by pretending.</p>
+    </div>
+    <div class="card">
+      <div class="addbar">
+        <input type="text" v-model="newStruggle" placeholder="Name a new battle (one at a time)…" @keyup.enter="addStruggle">
+        <button class="btn" @click="addStruggle">Add</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== COUNSEL (AI) ===================== -->
+  <section v-if="view==='counsel'">
+    <div class="card">
+      <h2>The strategist</h2>
+      <p class="muted small">A thinking aid — not a substitute for your spiritual director, your wife, or a real mentor. It sees your goals and your current battle, and reasons with you. Ask it to pressure‑test a decision, plan a week, or sequence what matters.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px">
+        <button class="btn ghost" @click="ask('Look at my domains and my current particular-examen battle. Tell me the THREE things that actually matter most in the next 90 days, and what to consciously stop doing. Be direct and concrete.')">Plan my 90 days</button>
+        <button class="btn ghost" @click="ask('Act as my weekly review partner. Given my goals and bricks, ask me 5 sharp questions that will surface where I am drifting, then suggest next week\'s three bricks.')">Weekly review</button>
+      </div>
+      <textarea v-model="aiPrompt" placeholder="Ask the strategist… e.g. 'I keep overspending. Design a system that makes saving for the house automatic and almost effortless.'"></textarea>
+      <div style="margin-top:10px"><button class="btn" :disabled="aiBusy" @click="ask()">
+        <span v-if="aiBusy"><span class="spin"></span> thinking…</span><span v-else>Ask</span></button></div>
+      <div v-if="aiOut" class="ai-out">{{ aiOut }}</div>
+      <div class="ai-note">In production, route this through your Node server so the API key never touches the browser. This is also where a weekly job can call Claude with web‑search to give you a "trends in your field" digest.</div>
+    </div>
+  </section>
+
+  <!-- ===================== PEOPLE ===================== -->
+  <section v-if="view==='people'">
+    <div class="card">
+      <h2>Counsel &amp; connections</h2>
+      <p class="muted small">Your real board of advisors. Street smarts and big-tech doors open through people, not applications. Keep the relationships warm — note the last contact and the next ask.</p>
+      <div v-for="p in people" :key="p.id" class="row person">
+        <div class="rowtext">
+          <span class="nm">{{ p.name }}</span> <span class="muted small">· {{ p.role }}</span>
+          <div class="sub">Last: {{ p.last || '—' }} · Next: <em>{{ p.next || 'set an ask' }}</em></div>
+        </div>
+        <button class="delx" @click="delPerson(p.id)">×</button>
+      </div>
+      <div class="sectlabel">Add someone</div>
+      <input type="text" v-model="np.name" placeholder="Name">
+      <div class="addbar">
+        <input type="text" v-model="np.role" placeholder="Who they are (mentor, recruiter, friend…)">
+        <input type="text" v-model="np.next" placeholder="Next ask / step">
+        <button class="btn" @click="addPerson">Add</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== LIBRARY ===================== -->
+  <section v-if="view==='library'">
+    <div class="card lib">
+      <h2>Formation — books &amp; audio</h2>
+      <p class="muted small">Read with a pencil. Tap the status to move a title along. Tied to the battles you named.</p>
+      <div v-for="b in library" :key="b.id" class="row">
+        <div class="rowtext"><span class="main">{{ b.title }}</span>
+          <div class="meta">{{ b.author }} · <span style="color:var(--gold)">{{ b.tag }}</span></div></div>
+        <span class="state" @click="cycleState(b)">{{ b.state }}</span>
+      </div>
+      <div class="addbar">
+        <input type="text" v-model="newBook" placeholder="Add a title…" @keyup.enter="addBook">
+        <button class="btn ghost" @click="addBook">+</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>Serviam · your data is saved on this device. Built to grow into your Vue + Node app.</footer>
+</div>
+
+<script>
+const { createApp } = Vue;
+const todayStr = () => new Date().toISOString().slice(0,10);
+const uid = () => Math.random().toString(36).slice(2,9);
+
+const SEED = {
+  view:'today',
+  domains:[
+    {id:'spirit', name:'Spirituality', glyph:'✝', foundation:true, open:true, goals:[
+      {title:'Live the plan of life faithfully, daily', why:'The foundation. Sanctify ordinary work, family and study — unity of life.', horizon:'now'},
+      {title:'Weekly confession & regular spiritual direction', why:'The real strategic counsel; the surest help against the errant heart.', horizon:'now'},
+      {title:'Monthly recollection & annual retreat', why:'Step back, re-aim the whole life.', horizon:'soon'},
+    ]},
+    {id:'family', name:'Family', glyph:'⌂', open:true, goals:[
+      {title:'Be present, forthright and tender with my wife', why:'Love guarded and spoken plainly — fidelity is built in the small, daily things.', horizon:'now'},
+      {title:'Buy or build the family home', why:'Stability for the three children; a long-overdue promise to keep.', horizon:'now'},
+      {title:'A real, unhurried hour with each child weekly', why:'Presence is the inheritance they remember.', horizon:'now'},
+    ]},
+    {id:'finance', name:'Finance', glyph:'₵', open:false, goals:[
+      {title:'Stop the overspending — automate saving first', why:'Pay the house fund before anything else; spend what remains, not the reverse.', horizon:'now'},
+      {title:'Primehub to KES 1M/month recurring', why:'Retainers + a productised SaaS, not one-off projects.', horizon:'now'},
+      {title:'Financial independence: bills covered without the salary', why:'Freedom to choose work, and to give.', horizon:'soon'},
+    ]},
+    {id:'career', name:'Career', glyph:'◈', open:false, goals:[
+      {title:'Transition out of the current role on my terms', why:'The July sprint is already running — finish it.', horizon:'now'},
+      {title:'Work with Microsoft / big tech', why:'D365 + solution-architecture depth is the bridge.', horizon:'soon'},
+      {title:'Live and work in Europe / the US for a season', why:'Exposure, scale, and lives touched beyond Nairobi.', horizon:'horizon'},
+    ]},
+    {id:'lead', name:'Leadership', glyph:'⚑', open:false, goals:[
+      {title:'Delegate at Primehub — hire/appoint an operations lead', why:'Make it an asset that runs without you, not a second job.', horizon:'now'},
+      {title:'Grow in delegation and trust', why:'Multiply through others; stop being the bottleneck.', horizon:'now'},
+    ]},
+    {id:'formation', name:'Formation & Skills', glyph:'✑', open:false, goals:[
+      {title:'Finish the MCom marketing thesis — finally', why:'Close the open loop that quietly drains you.', horizon:'soon'},
+      {title:'Sharpen the high-leverage technical & street-smart skills', why:'Architecture, AI, negotiation, reading the room.', horizon:'soon'},
+    ]},
+    {id:'social', name:'Influence & Service', glyph:'❖', open:false, goals:[
+      {title:'Build genuine connections and mentors', why:'Doors open through people; keep relationships warm.', horizon:'now'},
+      {title:'Touch lives — teach, build, give', why:'The point of the independence is to serve.', horizon:'horizon'},
+    ]},
+    {id:'health', name:'Health', glyph:'♁', open:false, goals:[
+      {title:'Order to the body: sleep, movement, sobriety of life', why:'The engine for everything above.', horizon:'now'},
+    ]},
+  ],
+  dailyNorms:[
+    {id:'n1', name:'Heroic minute — rise at once, "Serviam!"', sub:'The first victory of the day, won before anything else.'},
+    {id:'n2', name:'Morning offering & Angelus', sub:'Offer the day; consecrate the work to come.'},
+    {id:'n3', name:'Holy Mass & Communion', sub:'The centre and root of the interior life.'},
+    {id:'n4', name:'Mental prayer (30 min)', sub:'A friend who knows we are looking at him.'},
+    {id:'n5', name:'Spiritual reading — New Testament + a spiritual book'},
+    {id:'n6', name:'The Holy Rosary'},
+    {id:'n7', name:'Particular examen', sub:'The one battle of this season (see The Struggle).'},
+    {id:'n8', name:'Examination of conscience at night', sub:'Close the day honestly (see Nightly examen).'},
+    {id:'n9', name:'The Preces / aspirations through the day'},
+    {id:'n10', name:'A small mortification offered up', sub:'Custody of the senses; a sacrifice no one sees.'},
+  ],
+  rhythmNorms:[
+    {id:'w1', cadence:'weekly', name:'Confession', sub:'Frequent, regular — the medicine of mercy.'},
+    {id:'w2', cadence:'weekly', name:'The chat / spiritual direction', sub:'Your truest strategist. Keep it.'},
+    {id:'m1', cadence:'monthly', name:'Day of recollection'},
+    {id:'y1', cadence:'annual', name:'Annual retreat'},
+  ],
+  struggles:[
+    {id:'s1', title:'Custody of the heart — fidelity & forthrightness in love', note:'The keystone battle. Guard the senses, be plain and affectionate with my wife, bring it to confession and direction. Won one day at a time.'},
+    {id:'s2', title:'Curb overspending', note:'Before any purchase: is this the house fund or the whim? Save first, then spend what remains.'},
+  ],
+  bricks:[],
+  examen:[],
+  normHistory:{},
+  struggleHistory:{},
+  people:[
+    {id:'p1', name:'(Your spiritual director)', role:'direction & confession', last:'', next:'Set the weekly chat'},
+    {id:'p2', name:'(A Microsoft / big-tech insider)', role:'mentor / referral', last:'', next:'Find & message one this month'},
+  ],
+  library:[
+    {id:'b1', title:'The Way · Furrow · The Forge', author:'St. Josemaría Escrivá', tag:'foundation', state:'reading'},
+    {id:'b2', title:'In Conversation with God', author:'F. Fernández-Carvajal', tag:'daily meditation', state:'to read'},
+    {id:'b3', title:'Christ Is Passing By / Friends of God', author:'St. Josemaría Escrivá', tag:'spirit of work', state:'to read'},
+    {id:'b4', title:'Three to Get Married', author:'Fulton Sheen', tag:'marriage & love', state:'to read'},
+    {id:'b5', title:'The Psychology of Money', author:'Morgan Housel', tag:'overspending → wealth', state:'to read'},
+    {id:'b6', title:'The Richest Man in Babylon', author:'George Clason', tag:'pay yourself first', state:'to read'},
+    {id:'b7', title:'Deep Work', author:'Cal Newport', tag:'focus on what matters', state:'to read'},
+    {id:'b8', title:'Essentialism', author:'Greg McKeown', tag:'streamlining', state:'to read'},
+    {id:'b9', title:'Atomic Habits', author:'James Clear', tag:'the daily bricks', state:'to read'},
+    {id:'b10', title:'Who Not How', author:'Sullivan & Hardy', tag:'delegation', state:'to read'},
+    {id:'b11', title:'The 7 Habits of Highly Effective People', author:'Stephen Covey', tag:'principle-centred', state:'to read'},
+    {id:'b12', title:'Never Eat Alone', author:'Keith Ferrazzi', tag:'connections & street smarts', state:'to read'},
+    {id:'b13', title:'Never Split the Difference', author:'Chris Voss', tag:'negotiation', state:'to read'},
+    {id:'b14', title:'Hallow (app)', author:'audio · Rosary, examen, meditations', tag:'prayer on the go', state:'to read'},
+  ],
+};
+
+createApp({
+  data(){ return Object.assign({
+    tabs:[
+      {id:'today',label:'Today'},{id:'goals',label:'Goals'},{id:'struggle',label:'The Struggle'},
+      {id:'counsel',label:'Counsel'},{id:'people',label:'People'},{id:'library',label:'Library'},
+    ],
+    today: todayStr(),
+    newBrick:'', newGoal:{}, newStruggle:'', newBook:'',
+    np:{name:'',role:'',next:''},
+    examenDraft:{gratitude:'',struggle:'',resolution:''}, examenSavedMsg:'',
+    aiPrompt:'', aiOut:'', aiBusy:false,
+  }, JSON.parse(JSON.stringify(SEED))); },
+
+  computed:{
+    prettyDate(){ return new Date().toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'}); },
+    todaysBricks(){ return this.bricks.filter(b=>b.date===this.today); },
+    doneToday(){ const m=this.normHistory[this.today]||{}; return this.dailyNorms.filter(n=>m[n.id]).length; },
+    planPct(){ return Math.round(100*this.doneToday/this.dailyNorms.length); },
+    planStreak(){
+      let s=0; const d=new Date();
+      for(let i=0;i<400;i++){ const k=d.toISOString().slice(0,10); const m=this.normHistory[k]||{};
+        const all=this.dailyNorms.every(n=>m[n.id]);
+        if(all){s++;} else { if(k===this.today){d.setDate(d.getDate()-1);continue;} break; }
+        d.setDate(d.getDate()-1);
+      } return s;
+    },
+  },
+
+  methods:{
+    isNorm(id){ return !!(this.normHistory[this.today]||{})[id]; },
+    toggleNorm(id){ if(!this.normHistory[this.today]) this.normHistory[this.today]={};
+      this.normHistory[this.today][id]=!this.normHistory[this.today][id]; this.save(); },
+    addBrick(){ const t=this.newBrick.trim(); if(!t)return;
+      this.bricks.push({id:uid(),title:t,date:this.today,done:false,domain:''}); this.newBrick=''; this.save(); },
+    delBrick(id){ this.bricks=this.bricks.filter(b=>b.id!==id); this.save(); },
+    addGoal(d){ const t=(this.newGoal[d.id]||'').trim(); if(!t)return;
+      d.goals.push({title:t,why:'',horizon:'soon'}); this.newGoal[d.id]=''; this.save(); },
+    addStruggle(){ const t=this.newStruggle.trim(); if(!t)return;
+      this.struggles.push({id:uid(),title:t,note:''}); this.newStruggle=''; this.save(); },
+    keptToday(id){ return (this.struggleHistory[this.today]||{})[id]||null; },
+    setStruggle(id,val){ if(!this.struggleHistory[this.today]) this.struggleHistory[this.today]={};
+      this.struggleHistory[this.today][id]=val; this.save(); },
+    struggleStreak(id){ let s=0; const d=new Date();
+      for(let i=0;i<400;i++){ const k=d.toISOString().slice(0,10); const v=(this.struggleHistory[k]||{})[id];
+        if(v==='kept'){s++;} else { if(k===this.today){d.setDate(d.getDate()-1);continue;} break; }
+        d.setDate(d.getDate()-1);
+      } return s;
+    },
+    saveExamen(){ const e=this.examenDraft;
+      this.examen=this.examen.filter(x=>x.date!==this.today);
+      this.examen.push({date:this.today,...e});
+      this.examenSavedMsg='Day closed. Rest well.'; this.save();
+      setTimeout(()=>this.examenSavedMsg='',3500);
+    },
+    addPerson(){ if(!this.np.name.trim())return;
+      this.people.push({id:uid(),name:this.np.name,role:this.np.role,last:this.today,next:this.np.next});
+      this.np={name:'',role:'',next:''}; this.save(); },
+    delPerson(id){ this.people=this.people.filter(p=>p.id!==id); this.save(); },
+    addBook(){ const t=this.newBook.trim(); if(!t)return;
+      this.library.push({id:uid(),title:t,author:'',tag:'',state:'to read'}); this.newBook=''; this.save(); },
+    cycleState(b){ const o=['to read','reading','done']; b.state=o[(o.indexOf(b.state)+1)%3]; this.save(); },
+
+    async ask(preset){
+      const q = preset || this.aiPrompt.trim(); if(!q){return;}
+      if(!preset) {} else { this.aiPrompt=q; }
+      this.aiBusy=true; this.aiOut='';
+      const ctx = {
+        domains: this.domains.map(d=>({domain:d.name, foundation:!!d.foundation,
+          goals:d.goals.map(g=>g.title)})),
+        currentBattles: this.struggles.map(s=>s.title),
+      };
+      const system = "You are a wise, direct life strategist and mentor to Eric — a Catholic father of three (Opus Dei spirituality), solution architect and CPA, director of a software company (Primehub) in Nairobi, aiming for financial independence, big-tech work, and a home for his family. Honour his faith as the foundation: speak in terms of unity of life and sanctifying ordinary work. Be concrete, warm, and brief. Never flatter. Help him FOCUS — name what matters and what to drop. You are a thinking aid, not a replacement for his spiritual director or his wife; say so when the question belongs to them.";
+      try{
+        const r = await fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({
+            model:"claude-sonnet-4-20250514", max_tokens:1000, system,
+            messages:[{role:"user", content:`My life context (JSON):\n${JSON.stringify(ctx,null,2)}\n\nMy question:\n${q}`}]
+          })
+        });
+        const data = await r.json();
+        this.aiOut = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join("\n").trim()
+          || "No response — try again.";
+      }catch(e){ this.aiOut = "Could not reach the strategist from here. In your deployed app this call runs server-side and will work reliably."; }
+      this.aiBusy=false;
+    },
+
+    async save(){
+      try{ if(window.storage&&window.storage.set){
+        const snap={}; ['view','domains','dailyNorms','rhythmNorms','struggles','bricks','examen',
+          'normHistory','struggleHistory','people','library'].forEach(k=>snap[k]=this[k]);
+        await window.storage.set('serviam:state', JSON.stringify(snap), false);
+      }}catch(e){ /* in-memory fallback */ }
+    },
+    async load(){
+      try{ if(window.storage&&window.storage.get){
+        const res = await window.storage.get('serviam:state', false);
+        if(res&&res.value){ const s=JSON.parse(res.value); Object.assign(this, s); }
+      }}catch(e){ /* first run — keep seed */ }
+    },
+  },
+
+  async mounted(){ await this.load(); }
+}).mount('#app');
+</script>

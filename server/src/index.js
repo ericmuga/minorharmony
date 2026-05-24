@@ -11,6 +11,10 @@ import calendarRoutes from './routes/calendars.routes.js';
 import captureRoutes from './routes/capture.routes.js';
 import activityRoutes from './routes/activities.routes.js';
 import briefingRoutes from './routes/briefings.routes.js';
+import normsRoutes from './routes/norms.routes.js';
+import examenRoutes from './routes/examen.routes.js';
+import goalsRoutes from './routes/goals.routes.js';
+import libraryRoutes from './routes/library.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -27,7 +31,11 @@ app.use('/api/calendars', requireAuth, calendarRoutes);
 app.use('/api/capture', requireAuth, captureRoutes);
 app.use('/api/activities', requireAuth, activityRoutes);
 app.use('/api/briefings', requireAuth, briefingRoutes);
-// TODO (Claude Code): /api/goals, /api/norms, /api/struggles, /api/examen, /api/people, /api/library, /api/counsel
+app.use('/api/norms', requireAuth, normsRoutes);
+app.use('/api/examen', requireAuth, examenRoutes);
+app.use('/api/goals', requireAuth, goalsRoutes);
+app.use('/api/library', requireAuth, libraryRoutes);
+// TODO (Claude Code): /api/struggles, /api/people, /api/counsel
 
 // In production, serve the built PWA from web/dist (nginx can also do this directly).
 if (process.env.NODE_ENV === 'production') {
