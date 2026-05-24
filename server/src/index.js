@@ -15,6 +15,7 @@ import normsRoutes from './routes/norms.routes.js';
 import examenRoutes from './routes/examen.routes.js';
 import goalsRoutes from './routes/goals.routes.js';
 import libraryRoutes from './routes/library.routes.js';
+import counselRoutes from './routes/counsel.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -35,7 +36,8 @@ app.use('/api/norms', requireAuth, normsRoutes);
 app.use('/api/examen', requireAuth, examenRoutes);
 app.use('/api/goals', requireAuth, goalsRoutes);
 app.use('/api/library', requireAuth, libraryRoutes);
-// TODO (Claude Code): /api/struggles, /api/people, /api/counsel
+app.use('/api/counsel', requireAuth, counselRoutes);
+// TODO (Claude Code): /api/struggles, /api/people
 
 // In production, serve the built PWA from web/dist (nginx can also do this directly).
 if (process.env.NODE_ENV === 'production') {
