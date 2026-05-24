@@ -1,0 +1,9 @@
+# /etc/systemd/system/serviam-sync.service  (oneshot, run by the timer below)
+[Unit]
+Description=Serviam calendar sync
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/var/www/serviam/server
+EnvironmentFile=/var/www/serviam/.env
+ExecStart=/usr/bin/node src/scripts/sync-calendars.js

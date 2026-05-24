@@ -1,0 +1,14 @@
+:root{
+  --paper:#f4eee0; --ink:#2a2620; --ink-soft:#5b5448; --line:#d8ccb2; --line-soft:#e3d9c3;
+  --ox:#742a2a; --gold:#9a7a2e; --sage:#52614f; --personal:#3a6ea5;
+  --serif:'Cormorant Garamond',Georgia,serif; --body:'Spectral',Georgia,serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body)}
+button{font-family:var(--serif);cursor:pointer}
+input,select,textarea{font-family:var(--body)}
+.serif{font-family:var(--serif)}
+.muted{color:var(--ink-soft)} .small{font-size:13px}
+.btn{border:0;border-radius:9px;padding:8px 15px;background:var(--ox);color:#f7f1e3;font-size:16px}
+.btn.ghost{background:transparent;border:1px solid var(--ox);color:var(--ox)}
+.field{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fdfaf2;font-size:15px}

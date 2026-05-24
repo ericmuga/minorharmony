@@ -1,0 +1,8 @@
+# /etc/systemd/system/serviam-digest.timer — write the morning briefing daily
+[Unit]
+Description=Run Serviam briefing every morning
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+[Install]
+WantedBy=timers.target

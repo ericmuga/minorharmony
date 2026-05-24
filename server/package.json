@@ -1,0 +1,24 @@
+{
+  "name": "serviam-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "create-user": "node src/scripts/create-user.js",
+    "sync": "node src/scripts/sync-calendars.js",
+    "init-db": "node -e \"import('./src/db.js').then(()=>console.log('db ready'))\"",
+    "digest": "node src/scripts/run-digest.js",
+    "seed": "node src/scripts/seed-activities.js && node src/scripts/seed-briefing-topics.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "node-ical": "^0.20.1"
+  }
+}
