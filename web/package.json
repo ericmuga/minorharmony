@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "epubjs": "^0.3.93",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0"
   },

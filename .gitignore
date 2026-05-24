@@ -3,6 +3,7 @@ node_modules/
 .env
 server/data/*.db
 server/data/*.db-*
+server/data/epubs/
 web/dist/
 .DS_Store
 .claude/

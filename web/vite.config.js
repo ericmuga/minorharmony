@@ -17,5 +17,6 @@ export default defineConfig({
       }
     })
   ],
-  server: { proxy: { '/api': 'http://localhost:8787' } }   // dev: Vite -> Node
+  server: { proxy: { '/api': 'http://localhost:8787' } },   // dev: Vite -> Node
+  optimizeDeps: { include: ['epubjs'] },                    // epubjs ships CommonJS; force pre-bundle
 });

@@ -1,13 +1,53 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { api } from '../api.js';
 
+const router = useRouter();
 const books = ref([]);
 const np = reactive({ title: '', author: '', tag: '', url: '' });
 const editing = ref(null);                // book being edited (or null)
+const uploadingId = ref(null);
+const fileInputs = ref({});               // bookId -> input ref
 
 async function load() {
   books.value = await api.get('/library');
+}
+
+function pickFile(bookId) {
+  fileInputs.value[bookId]?.click();
+}
+
+async function onFile(bookId, ev) {
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!file) return;
+  if (!/\.epub$/i.test(file.name)) { alert('Pick a .epub file'); return; }
+  if (file.size > 50 * 1024 * 1024) { alert('Too large — 50 MB max'); return; }
+  uploadingId.value = bookId;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`/api/library/${bookId}/file`, {
+      method: 'POST', credentials: 'include', body: fd,
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    await load();
+  } catch (e) {
+    alert('Upload failed: ' + e.message);
+  } finally {
+    uploadingId.value = null;
+  }
+}
+
+async function removeFile(b) {
+  if (!confirm(`Remove the uploaded EPUB for "${b.title}"?`)) return;
+  await api.del(`/library/${b.id}/file`);
+  await load();
+}
+
+function read(b) {
+  router.push(`/reading/${b.id}/read`);
 }
 
 async function add() {
@@ -58,14 +98,25 @@ onMounted(load);
         <a href="https://escrivaworks.org" target="_blank" rel="noopener">escrivaworks.org</a>.
       </p>
 
-      <div v-for="b in books" :key="b.id" class="row" style="align-items:center">
-        <div class="rowtext">
+      <div v-for="b in books" :key="b.id" class="row" style="align-items:center;flex-wrap:wrap;gap:6px">
+        <div class="rowtext" style="min-width:160px">
           <span class="main">{{ b.title }}</span>
           <div class="meta">
             <span v-if="b.author">{{ b.author }}</span>
             <span v-if="b.tag"> · <span style="color:var(--gold)">{{ b.tag }}</span></span>
           </div>
         </div>
+
+        <button v-if="b.epub_path" class="btn small" @click="read(b)">Read</button>
+        <button v-else class="btn ghost small" :disabled="uploadingId === b.id"
+                @click="pickFile(b.id)">
+          {{ uploadingId === b.id ? 'Uploading…' : 'Upload .epub' }}
+        </button>
+        <button v-if="b.epub_path" class="btn ghost small" @click="removeFile(b)" title="Remove the EPUB file">⌫ file</button>
+        <input type="file" accept=".epub,application/epub+zip" style="display:none"
+               :ref="el => { if (el) fileInputs[b.id] = el }"
+               @change="onFile(b.id, $event)">
+
         <a v-if="b.url" :href="b.url" target="_blank" rel="noopener" class="openlink">Open ↗</a>
         <span class="state" @click="cycle(b)">{{ b.state }}</span>
         <button class="btn ghost small" @click="startEdit(b)">Edit</button>

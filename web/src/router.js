@@ -4,6 +4,7 @@ import Login from './views/Login.vue';
 import Today from './views/Today.vue';
 import Goals from './views/Goals.vue';
 import Library from './views/Library.vue';
+import Reader from './views/Reader.vue';
 import Briefing from './views/Briefing.vue';
 
 export default createRouter({
@@ -15,6 +16,7 @@ export default createRouter({
     { path: '/today', component: Today },
     { path: '/goals', component: Goals },
     { path: '/reading', component: Library },
+    { path: '/reading/:id/read', component: Reader },
     { path: '/briefing', component: Briefing },
   ],
 });
