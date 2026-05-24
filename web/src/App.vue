@@ -13,6 +13,8 @@ async function logout(){ await auth.logout(); router.push('/login'); }
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/planner">Planner</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/today">Today</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/goals">Goals</router-link>
+        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/struggle">Struggle</router-link>
+        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/people">People</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/reading">Reading</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/counsel">Counsel</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/briefing">Briefing</router-link>

@@ -6,6 +6,8 @@ import Goals from './views/Goals.vue';
 import Library from './views/Library.vue';
 import Reader from './views/Reader.vue';
 import Counsel from './views/Counsel.vue';
+import Struggle from './views/Struggle.vue';
+import People from './views/People.vue';
 import Briefing from './views/Briefing.vue';
 
 export default createRouter({
@@ -18,6 +20,8 @@ export default createRouter({
     { path: '/goals', component: Goals },
     { path: '/reading', component: Library },
     { path: '/reading/:id/read', component: Reader },
+    { path: '/struggle', component: Struggle },
+    { path: '/people', component: People },
     { path: '/counsel', component: Counsel },
     { path: '/briefing', component: Briefing },
   ],

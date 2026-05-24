@@ -82,14 +82,30 @@ const library = [
   { title: 'Hallow (app)', author: 'audio · Rosary, examen, meditations', tag: 'prayer on the go' },
 ];
 
-const countNorms   = db.prepare('SELECT COUNT(*) c FROM norms   WHERE user_id = ?').get(U).c;
-const countDomains = db.prepare('SELECT COUNT(*) c FROM domains WHERE user_id = ?').get(U).c;
-const countLibrary = db.prepare('SELECT COUNT(*) c FROM library WHERE user_id = ?').get(U).c;
+const struggles = [
+  { title: 'Custody of the heart — fidelity & forthrightness in love',
+    note: 'The keystone battle. Guard the senses, be plain and affectionate with my wife, bring it to confession and direction. Won one day at a time.' },
+  { title: 'Curb overspending',
+    note: 'Before any purchase: is this the house fund or the whim? Save first, then spend what remains.' },
+];
+
+const people = [
+  { name: '(Your spiritual director)', role: 'direction & confession', next_ask: 'Set the weekly chat' },
+  { name: '(A Microsoft / big-tech insider)', role: 'mentor / referral', next_ask: 'Find & message one this month' },
+];
+
+const countNorms     = db.prepare('SELECT COUNT(*) c FROM norms     WHERE user_id = ?').get(U).c;
+const countDomains   = db.prepare('SELECT COUNT(*) c FROM domains   WHERE user_id = ?').get(U).c;
+const countLibrary   = db.prepare('SELECT COUNT(*) c FROM library   WHERE user_id = ?').get(U).c;
+const countStruggles = db.prepare('SELECT COUNT(*) c FROM struggles WHERE user_id = ?').get(U).c;
+const countPeople    = db.prepare('SELECT COUNT(*) c FROM people    WHERE user_id = ?').get(U).c;
 
 const insNorm = db.prepare('INSERT INTO norms (user_id, name, sub, cadence, sort) VALUES (?,?,?,?,?)');
 const insDomain = db.prepare('INSERT INTO domains (user_id, name, glyph, is_foundation, sort) VALUES (?,?,?,?,?)');
 const insGoal = db.prepare('INSERT INTO goals (domain_id, title, why, horizon) VALUES (?,?,?,?)');
 const insLib = db.prepare('INSERT INTO library (user_id, title, author, tag, state) VALUES (?,?,?,?,?)');
+const insStruggle = db.prepare('INSERT INTO struggles (user_id, title, note) VALUES (?,?,?)');
+const insPerson = db.prepare('INSERT INTO people (user_id, name, role, next_ask) VALUES (?,?,?,?)');
 
 db.transaction(() => {
   if (countNorms === 0) {
@@ -111,6 +127,16 @@ db.transaction(() => {
     library.forEach(b => insLib.run(U, b.title, b.author || null, b.tag || null, b.state || 'to read'));
     console.log(`  library: seeded ${library.length}`);
   } else console.log(`  library: skipped (already have ${countLibrary})`);
+
+  if (countStruggles === 0) {
+    struggles.forEach(s => insStruggle.run(U, s.title, s.note || null));
+    console.log(`  struggles: seeded ${struggles.length}`);
+  } else console.log(`  struggles: skipped (already have ${countStruggles})`);
+
+  if (countPeople === 0) {
+    people.forEach(p => insPerson.run(U, p.name, p.role || null, p.next_ask || null));
+    console.log(`  people: seeded ${people.length}`);
+  } else console.log(`  people: skipped (already have ${countPeople})`);
 })();
 
 console.log(`Done for user ${U}.`);
