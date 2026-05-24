@@ -136,7 +136,10 @@ CREATE TABLE IF NOT EXISTS people (
 );
 CREATE TABLE IF NOT EXISTS library (
   id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, title TEXT NOT NULL,
-  author TEXT, tag TEXT, state TEXT DEFAULT 'to read'
+  author TEXT, tag TEXT, state TEXT DEFAULT 'to read',
+  url TEXT,                                        -- buy / read-online link
+  epub_path TEXT,                                  -- relative path under server/data/epubs/ if uploaded
+  last_loc TEXT                                    -- last reading location (CFI from epub.js)
 );
 
 -- ---- Recurring activities (gym, swimming, piano, hiking…) ----

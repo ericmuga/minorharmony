@@ -6,21 +6,22 @@ const STATES = ['to read', 'reading', 'done'];
 
 r.get('/', (req, res) =>
   res.json(db.prepare(
-    `SELECT id, title, author, tag, state FROM library WHERE user_id = ? ORDER BY id`
+    `SELECT id, title, author, tag, state, url, epub_path, last_loc
+       FROM library WHERE user_id = ? ORDER BY id`
   ).all(req.user.id)));
 
 r.post('/', (req, res) => {
-  const { title, author, tag, state } = req.body || {};
+  const { title, author, tag, state, url } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title_required' });
   const info = db.prepare(
-    `INSERT INTO library (user_id, title, author, tag, state) VALUES (?,?,?,?,?)`
+    `INSERT INTO library (user_id, title, author, tag, state, url) VALUES (?,?,?,?,?,?)`
   ).run(req.user.id, title, author || null, tag || null,
-       STATES.includes(state) ? state : 'to read');
+       STATES.includes(state) ? state : 'to read', url || null);
   res.json({ id: info.lastInsertRowid });
 });
 
 r.patch('/:id', (req, res) => {
-  const f = ['title', 'author', 'tag', 'state'];
+  const f = ['title', 'author', 'tag', 'state', 'url', 'last_loc'];
   const sets = [], vals = [];
   for (const k of f) if (k in (req.body || {})) {
     if (k === 'state' && !STATES.includes(req.body[k])) continue;

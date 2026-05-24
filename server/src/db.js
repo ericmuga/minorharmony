@@ -15,4 +15,14 @@ db.pragma('foreign_keys = ON');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+// Idempotent column additions for older DBs (CREATE TABLE IF NOT EXISTS
+// can't add columns to existing tables). Safe to keep here forever.
+function ensureColumn(table, column, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${def}`);
+}
+ensureColumn('library', 'url', 'TEXT');
+ensureColumn('library', 'epub_path', 'TEXT');
+ensureColumn('library', 'last_loc', 'TEXT');
+
 export default db;
