@@ -65,10 +65,28 @@ const domains = [
   ]},
 ];
 
+// Escrivá works hosted free at escriva.org (verified URLs).
+const ESCRIVA_AUTHOR = 'St. Josemaría Escrivá';
+const escrivaUrls = {
+  'The Way':              'https://escriva.org/en/camino/',
+  'Furrow':               'https://escriva.org/en/surco/',
+  'The Forge':            'https://escriva.org/en/forja/',
+  'Christ Is Passing By': 'https://escriva.org/en/es-cristo-que-pasa/',
+  'Friends of God':       'https://escriva.org/en/amigos-de-dios/',
+};
+// Old bundled titles from the prototype — replaced on backfill with splits below.
+const OLD_BUNDLED_TITLES = [
+  'The Way · Furrow · The Forge',
+  'Christ Is Passing By / Friends of God',
+];
+
 const library = [
-  { title: 'The Way · Furrow · The Forge', author: 'St. Josemaría Escrivá', tag: 'foundation', state: 'reading' },
+  { title: 'The Way',              author: ESCRIVA_AUTHOR, tag: 'foundation',     state: 'reading', url: escrivaUrls['The Way'] },
+  { title: 'Furrow',               author: ESCRIVA_AUTHOR, tag: 'foundation',                       url: escrivaUrls['Furrow'] },
+  { title: 'The Forge',            author: ESCRIVA_AUTHOR, tag: 'foundation',                       url: escrivaUrls['The Forge'] },
   { title: 'In Conversation with God', author: 'F. Fernández-Carvajal', tag: 'daily meditation' },
-  { title: 'Christ Is Passing By / Friends of God', author: 'St. Josemaría Escrivá', tag: 'spirit of work' },
+  { title: 'Christ Is Passing By', author: ESCRIVA_AUTHOR, tag: 'spirit of work',                   url: escrivaUrls['Christ Is Passing By'] },
+  { title: 'Friends of God',       author: ESCRIVA_AUTHOR, tag: 'spirit of work',                   url: escrivaUrls['Friends of God'] },
   { title: 'Three to Get Married', author: 'Fulton Sheen', tag: 'marriage & love' },
   { title: 'The Psychology of Money', author: 'Morgan Housel', tag: 'overspending → wealth' },
   { title: 'The Richest Man in Babylon', author: 'George Clason', tag: 'pay yourself first' },
@@ -125,8 +143,38 @@ db.transaction(() => {
 
   if (countLibrary === 0) {
     library.forEach(b => insLib.run(U, b.title, b.author || null, b.tag || null, b.state || 'to read'));
+    // Set URLs on the rows we just inserted.
+    const setUrl = db.prepare('UPDATE library SET url = ? WHERE user_id = ? AND title = ? AND url IS NULL');
+    library.forEach(b => { if (b.url) setUrl.run(b.url, U, b.title); });
     console.log(`  library: seeded ${library.length}`);
-  } else console.log(`  library: skipped (already have ${countLibrary})`);
+  } else {
+    // Backfill pass for users who seeded before URLs existed:
+    //   (a) replace old bundled entries with the split versions
+    //   (b) set url on individual Escrivá titles where it's missing
+    let split = 0, urlSet = 0;
+    for (const oldTitle of OLD_BUNDLED_TITLES) {
+      const row = db.prepare('SELECT id, state FROM library WHERE user_id = ? AND title = ?').get(U, oldTitle);
+      if (!row) continue;
+      db.prepare('DELETE FROM library WHERE id = ?').run(row.id);
+      const parts = oldTitle === 'The Way · Furrow · The Forge'
+        ? ['The Way', 'Furrow', 'The Forge']
+        : ['Christ Is Passing By', 'Friends of God'];
+      for (const p of parts) {
+        insLib.run(U, p, ESCRIVA_AUTHOR,
+          oldTitle === 'The Way · Furrow · The Forge' ? 'foundation' : 'spirit of work',
+          row.state || 'to read');
+        db.prepare('UPDATE library SET url = ? WHERE user_id = ? AND title = ? AND url IS NULL')
+          .run(escrivaUrls[p], U, p);
+        split++;
+      }
+    }
+    const setUrl = db.prepare('UPDATE library SET url = ? WHERE user_id = ? AND title = ? AND url IS NULL');
+    for (const [title, url] of Object.entries(escrivaUrls)) {
+      const info = setUrl.run(url, U, title);
+      if (info.changes) urlSet++;
+    }
+    console.log(`  library: existing (${countLibrary}); backfilled ${urlSet} url(s), split ${split} bundled entry/entries`);
+  }
 
   if (countStruggles === 0) {
     struggles.forEach(s => insStruggle.run(U, s.title, s.note || null));

@@ -17,7 +17,7 @@ async function ask(preset) {
     const { text } = await api.post('/counsel', { question: q, web: useWeb.value });
     out.value = text || '(no response)';
   } catch (e) {
-    err.value = 'Could not reach the strategist — is ANTHROPIC_API_KEY set on the server?';
+    err.value = `Strategist call failed: ${e?.message || 'unknown'}. Check the server terminal for the full error.`;
   } finally {
     busy.value = false;
   }
