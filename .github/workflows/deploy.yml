@@ -22,7 +22,7 @@ jobs:
       - name: Trust VPS host key
         run: ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Pull, build, restart
+      - name: Pull, build, reload
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -30,10 +30,26 @@ jobs:
           ssh "$DEPLOY_USER@$DEPLOY_HOST" 'bash -se' <<'REMOTE'
             set -euo pipefail
             cd /var/www/serviam
+
+            # Fail fast if the box isn't bootstrapped
+            if ! node -v 2>/dev/null | grep -q '^v20'; then
+              echo "FATAL: VPS has $(node -v 2>/dev/null || echo no-node), needs Node 20." >&2
+              echo "       Run: cd /var/www/serviam && bash deploy/bootstrap.sh" >&2
+              exit 1
+            fi
+
             git fetch --prune origin
             git reset --hard origin/main
+
             (cd server && npm ci --omit=dev)
             (cd web && npm ci && npm run build)
+
+            # systemd units + nginx vhost are symlinks into the repo (set up by bootstrap.sh)
+            # so a git pull already updated their content — we just reload.
+            sudo /bin/systemctl daemon-reload
+            sudo /usr/sbin/nginx -t
+            sudo /bin/systemctl reload nginx
             sudo /bin/systemctl restart serviam
+
             echo "Deploy OK: $(git rev-parse --short HEAD)"
           REMOTE
