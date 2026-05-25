@@ -94,8 +94,9 @@ onMounted(load);
       <h2>Formation — books &amp; audio</h2>
       <p class="muted small" style="margin:.1em 0 .6em">
         Read with a pencil. Tap the status to move a title along. Tied to the battles you named.
-        <br>For the Escrivá works, the full text is freely hosted at
-        <a href="https://escrivaworks.org" target="_blank" rel="noopener">escrivaworks.org</a>.
+        <br>The Escrivá works are freely hosted at
+        <a href="https://escriva.org/en/" target="_blank" rel="noopener">escriva.org</a> —
+        <router-link to="/reading/escriva">browse them inside the app ›</router-link>
       </p>
 
       <div v-for="b in books" :key="b.id" class="row" style="align-items:center;flex-wrap:wrap;gap:6px">
