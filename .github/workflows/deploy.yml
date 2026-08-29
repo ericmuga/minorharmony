@@ -43,6 +43,21 @@ jobs:
             git fetch --prune origin
             git reset --hard origin/main
 
+            # /usr/etc/npmrc on this box points the npm cache at /var/cache/npm,
+            # which belongs to a different user ("deploy") — unwritable for us.
+            # Keep our cache in our own home instead of touching that shared file.
+            export npm_config_cache="$HOME/.npm"
+
+            # node_modules must belong to us. If someone ran npm as root by hand,
+            # `npm ci` cannot remove the old tree and dies with EACCES on rmdir.
+            for d in server/node_modules web/node_modules; do
+              if [[ -e "$d" && ! -O "$d" ]]; then
+                echo "FATAL: $d is owned by $(stat -c %U "$d"), not $(whoami)." >&2
+                echo "       On the box: sudo chown -R $(whoami): /var/www/serviam" >&2
+                exit 1
+              fi
+            done
+
             (cd server && npm ci --omit=dev)
             (cd web && npm ci && npm run build)
 
