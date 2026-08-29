@@ -1,6 +1,6 @@
 // Minimal server-side Claude client. Needs ANTHROPIC_API_KEY in .env.
 // Used by the daily briefing and the strategist. Never expose the key to the browser.
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 
 export async function askClaude({ system, prompt, maxTokens = 800, web = false }) {
   const key = process.env.ANTHROPIC_API_KEY;

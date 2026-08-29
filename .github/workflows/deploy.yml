@@ -31,9 +31,11 @@ jobs:
             set -euo pipefail
             cd /var/www/serviam
 
-            # Fail fast if the box isn't bootstrapped
-            if ! node -v 2>/dev/null | grep -q '^v20'; then
-              echo "FATAL: VPS has $(node -v 2>/dev/null || echo no-node), needs Node 20." >&2
+            # Shared box: we require Node >= 20 but never pin an exact major,
+            # because other apps on this VPS run on the same system Node.
+            NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/')
+            if [[ -z "${NODE_MAJOR:-}" || "$NODE_MAJOR" -lt 20 ]]; then
+              echo "FATAL: VPS has $(node -v 2>/dev/null || echo no-node), needs Node >= 20." >&2
               echo "       Run: cd /var/www/serviam && bash deploy/bootstrap.sh" >&2
               exit 1
             fi
@@ -51,5 +53,15 @@ jobs:
             sudo /bin/systemctl reload nginx
             sudo /bin/systemctl restart serviam
 
-            echo "Deploy OK: $(git rev-parse --short HEAD)"
+            # Don't call a deploy green until the API actually answers.
+            for i in $(seq 1 15); do
+              if curl -fsS -m 3 http://127.0.0.1:8787/api/health >/dev/null; then
+                echo "Deploy OK: $(git rev-parse --short HEAD)"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "FATAL: serviam did not become healthy on :8787" >&2
+            systemctl status serviam --no-pager | tail -20 >&2 || true
+            exit 1
           REMOTE
