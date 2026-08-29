@@ -75,8 +75,18 @@ else
 fi
 
 echo "==> [4/9] Install dependencies and build"
-(cd server && npm install)
-(cd web && npm install && npm run build)
+# `npm ci` (not `npm install`) — it wipes node_modules and reinstalls from the
+# lockfile, which is the only way to be sure a native module left over from an
+# earlier run under a different Node gets recompiled for the current ABI.
+(cd server && { npm ci --omit=dev || npm install --omit=dev; })
+(cd web && { npm ci || npm install; } && npm run build)
+
+# better-sqlite3 only dlopen()s its binary when a Database is constructed, so a
+# bare require() is not proof it works. Actually open one.
+echo "    verifying better-sqlite3 against $(node -v)"
+(cd server && node -e "const D=require('better-sqlite3'); new D(':memory:').close();")   || { echo "    FATAL: better-sqlite3 will not load under $(node -v)." >&2
+       echo "           rm -rf server/node_modules and re-run this script." >&2; exit 1; }
+echo "    better-sqlite3 OK"
 
 echo "==> [5/9] Ownership"
 # Repo owned by deploy user (so CI can git pull / npm ci without sudo)
