@@ -66,6 +66,17 @@ git pull
 bash deploy/bootstrap.sh
 ```
 
+> **Node on this box is two different things.** root has nvm installed with
+> **v16.13.2** as its default, so an *interactive* ssh session gets Node 16, while
+> non-interactive sessions (GitHub Actions) and the systemd units (`/usr/bin/node`)
+> get **v22.22.3**. Running `npm install` under the wrong one leaves `better-sqlite3`
+> compiled for an ABI the service can't load. `bootstrap.sh` pins `PATH=/usr/bin`
+> to avoid this, but if you're running npm by hand, first do:
+>
+> ```bash
+> nvm deactivate && hash -r && node -v    # must print v22.x
+> ```
+
 It installs only missing packages, refuses to touch Node, builds `web/dist`, symlinks the
 systemd units and the nginx vhost (`/etc/nginx/sites-available/serviam.minorharmony.com.conf`,
 matching this box's naming convention), enables the API + both timers, and writes a narrow

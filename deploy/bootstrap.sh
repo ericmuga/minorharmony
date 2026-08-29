@@ -16,6 +16,14 @@
 
 set -euo pipefail
 
+# This box has nvm installed for root with an old default (v16.13.2). Interactive
+# shells source it and get that Node; non-interactive ones — CI over ssh, and the
+# systemd units, which hardcode /usr/bin/node — get v22. better-sqlite3 is a native
+# module bound to the ABI it was compiled against, so we must always build with the
+# same Node the service will run. Pin PATH to /usr/bin, whatever the caller's shell.
+export PATH="/usr/bin:$PATH"
+hash -r
+
 REPO_DIR="/var/www/serviam"
 DOMAIN="serviam.minorharmony.com"
 VHOST="$DOMAIN.conf"                                  # matches this box's naming convention
@@ -49,7 +57,7 @@ if [[ -z "$NODE_MAJOR" || "$NODE_MAJOR" -lt 20 ]]; then
   echo "    because other apps on this box depend on it." >&2
   exit 1
 fi
-echo "    node $(node -v) / npm $(npm -v) — OK, leaving untouched."
+echo "    node $(node -v) at $(command -v node) / npm $(npm -v) — OK, leaving untouched."
 
 echo "==> [3/9] Production .env"
 if [[ ! -f .env ]]; then
