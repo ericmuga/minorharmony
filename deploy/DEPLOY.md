@@ -74,9 +74,14 @@ sudoers rule so CI can reload services without full root.
 Then create your login:
 
 ```bash
-cd /var/www/serviam/server && sudo -u www-data npm run create-user
-npm run seed     # gym/swim/piano/hiking + briefing topics
+cd /var/www/serviam/server
+npm run create-user                                   # interactive: sets your password
+npm run seed                                          # activities + briefing topics
+chown -R www-data:www-data /var/www/serviam/server/data
 ```
+
+Run these as root, then hand the DB back to `www-data` — running npm *as* `www-data`
+fails on this box because that user has no writable `HOME` for the npm cache.
 
 ### Smoke-test before DNS exists
 
@@ -143,7 +148,7 @@ Add each via `POST /api/calendars`. `serviam-sync.timer` refreshes both every 15
 `ANTHROPIC_API_KEY` in `/var/www/serviam/.env`. Generate one immediately to test:
 
 ```bash
-cd /var/www/serviam/server && sudo -u www-data node src/scripts/run-digest.js
+cd /var/www/serviam/server && node src/scripts/run-digest.js
 ```
 
 The Briefing tab reads the latest per topic; "Refresh" calls `POST /api/briefings/generate`.
