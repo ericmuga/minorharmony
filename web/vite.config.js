@@ -7,6 +7,12 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // The pdf.js worker is over a megabyte and only some users ever open a
+        // PDF. Precaching it would spend that on every install, on mobile data.
+        // It's fetched on demand instead.
+        globIgnores: ['**/pdf.worker*.mjs'],
+      },
       manifest: {
         name: 'Serviam', short_name: 'Serviam', theme_color: '#742a2a', background_color: '#f4eee0',
         display: 'standalone', start_url: '/',

@@ -1,8 +1,12 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, onMounted, onBeforeUnmount, nextTick, defineAsyncComponent } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import ePub from 'epubjs';
 import { api } from '../api.js';
+// pdf.js is ~1.3 MB with its worker. Loading it eagerly would double the initial
+// bundle for everyone, including people who only ever open EPUBs — so it's
+// fetched the first time a PDF is actually opened.
+const PdfView = defineAsyncComponent(() => import('./PdfView.vue'));
 
 const route = useRoute();
 const router = useRouter();
@@ -14,6 +18,8 @@ const meta = ref(null);
 const err = ref('');
 const immersive = ref(false);
 const chromeVisible = ref(true);       // in immersive mode the bars auto-hide
+const kind = ref(null);                // 'epub' | 'pdf', from the stored filename
+const pdfRef = ref(null);
 let book = null;
 let rendition = null;
 let saveTimer = null;
@@ -25,9 +31,14 @@ async function init() {
     const all = await api.get('/library');
     meta.value = all.find(b => b.id === bookId);
     if (!meta.value?.epub_path) {
-      err.value = 'No EPUB uploaded for this book. Upload one from the Reading tab first.';
+      err.value = 'No file uploaded for this book. Upload an EPUB or PDF from the Reading tab first.';
       return;
     }
+
+    // The column stores the real filename, so the extension is the format.
+    kind.value = /\.pdf$/i.test(meta.value.epub_path) ? 'pdf' : 'epub';
+    if (kind.value === 'pdf') return;      // PdfView takes it from here
+
     book = ePub(`/api/library/${bookId}/file`, { openAs: 'epub' });
     rendition = book.renderTo(containerRef.value, {
       width: '100%', height: '100%', flow: 'paginated', spread: 'auto',
@@ -71,8 +82,17 @@ function resize() {
   if (w > 0 && h > 0) { try { rendition.resize(w, h); } catch { /* mid-teardown */ } }
 }
 
-function next() { rendition?.next(); nudgeChrome(); }
-function prev() { rendition?.prev(); nudgeChrome(); }
+function next() { kind.value === 'pdf' ? pdfRef.value?.next() : rendition?.next(); nudgeChrome(); }
+function prev() { kind.value === 'pdf' ? pdfRef.value?.prev() : rendition?.prev(); nudgeChrome(); }
+
+// PdfView reports the page it settled on; store it the same way as an EPUB CFI,
+// debounced, so flipping quickly doesn't write once per page.
+function onPdfLocated(loc) {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    api.patch(`/library/${bookId}`, { last_loc: loc }).catch(() => {});
+  }, 600);
+}
 
 // ---- immersive / full screen ----------------------------------------------
 // Two layers, deliberately: the CSS overlay is what actually makes it full
@@ -156,7 +176,12 @@ onBeforeUnmount(() => {
     <p v-if="err" class="err">{{ err }}</p>
 
     <div class="viewport">
-      <div ref="containerRef" class="page"></div>
+      <div v-show="kind !== 'pdf'" ref="containerRef" class="page"></div>
+      <div v-if="kind === 'pdf'" class="page">
+        <PdfView ref="pdfRef" :src="`/api/library/${bookId}/file`"
+                 :start-page="meta?.last_loc || 1"
+                 @located="onPdfLocated" @error="e => err = 'Could not open PDF: ' + e" />
+      </div>
       <!-- Tap zones: the left/right thirds page, so a thumb works without
            hunting for a button. They sit under the text, not over it, so
            selecting and following links still behave. -->
@@ -166,6 +191,13 @@ onBeforeUnmount(() => {
 
     <div class="bar bottom" :class="{ hidden: immersive && !chromeVisible }">
       <button class="btn ghost" @click="prev">← Prev</button>
+      <template v-if="kind === 'pdf' && pdfRef?.pageCount">
+        <span class="muted small" style="white-space:nowrap">
+          {{ pdfRef.page }} / {{ pdfRef.pageCount }}
+        </span>
+        <button class="btn ghost small" title="Zoom out" @click="pdfRef.zoomOut()">−</button>
+        <button class="btn ghost small" title="Zoom in" @click="pdfRef.zoomIn()">+</button>
+      </template>
       <button class="btn ghost" @click="next">Next →</button>
     </div>
     <p v-if="!immersive" class="muted small hint">

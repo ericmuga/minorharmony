@@ -4,7 +4,8 @@ import Login from './views/Login.vue';
 import Today from './views/Today.vue';
 import Goals from './views/Goals.vue';
 import Library from './views/Library.vue';
-import Reader from './views/Reader.vue';
+// epub.js only matters once you open a book, so keep it out of the first load.
+const Reader = () => import('./views/Reader.vue');
 import EscrivaLibrary from './views/EscrivaLibrary.vue';
 import Counsel from './views/Counsel.vue';
 import Struggle from './views/Struggle.vue';

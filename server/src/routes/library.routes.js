@@ -17,6 +17,29 @@ fs.mkdirSync(STAGE_DIR, { recursive: true });
 
 const STAGE_TTL_MS = 6 * 60 * 60 * 1000;
 
+// EPUB and PDF. The `epub_path` column keeps its name for the sake of existing
+// rows, but it stores the real filename including extension — read it, don't
+// assume .epub anywhere.
+const ALLOWED = {
+  '.epub': 'application/epub+zip',
+  '.pdf': 'application/pdf',
+};
+const BOOK_RE = /\.(epub|pdf)$/i;
+
+// Never trust the client's extension for anything but choosing between these
+// two known-good values.
+function extOf(filename) {
+  const m = BOOK_RE.exec(String(filename || ''));
+  return m ? '.' + m[1].toLowerCase() : null;
+}
+
+function acceptBook(_req, file, cb) {
+  const ok = BOOK_RE.test(file.originalname) ||
+             file.mimetype === 'application/epub+zip' ||
+             file.mimetype === 'application/pdf';
+  cb(ok ? null : new Error('only_epub_or_pdf'), ok);
+}
+
 // An import the user abandoned would otherwise sit on disk forever. Sweep on
 // boot and before each new import — cheap, and there is never much here.
 function sweepStaging() {
@@ -46,14 +69,11 @@ function requireOwnedBook(req, res, next) {
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, EPUB_DIR),
-    filename: (req, _file, cb) => cb(null, `${req.params.id}.epub`),
+    filename: (req, file, cb) =>
+      cb(null, `${req.params.id}${extOf(file.originalname) || '.epub'}`),
   }),
   limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const ok = /\.epub$/i.test(file.originalname) ||
-               file.mimetype === 'application/epub+zip';
-    cb(ok ? null : new Error('only_epub'), ok);
-  },
+  fileFilter: acceptBook,
 });
 
 r.get('/', (req, res) =>
@@ -96,8 +116,15 @@ r.post('/:id/file', requireOwnedBook, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'no_file' });
+    // Swapping an EPUB for a PDF (or back) leaves the old file behind under the
+    // other extension, and the stale one would win on the next delete. Clear it.
+    const prev = db.prepare('SELECT epub_path FROM library WHERE id = ? AND user_id = ?')
+      .get(req.params.id, req.user.id)?.epub_path;
+    if (prev && prev !== req.file.filename) {
+      try { fs.unlinkSync(path.join(EPUB_DIR, prev)); } catch { /* already gone */ }
+    }
     db.prepare('UPDATE library SET epub_path = ?, last_loc = NULL WHERE id = ? AND user_id = ?')
-      .run(`${req.params.id}.epub`, req.params.id, req.user.id);
+      .run(req.file.filename, req.params.id, req.user.id);
     res.json({ ok: true, size: req.file.size });
   });
 });
@@ -108,13 +135,17 @@ r.get('/:id/file', requireOwnedBook, (req, res) => {
   if (!row?.epub_path) return res.status(404).json({ error: 'no_file' });
   const fp = path.join(EPUB_DIR, row.epub_path);
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'missing_on_disk' });
-  res.setHeader('Content-Type', 'application/epub+zip');
+  res.setHeader('Content-Type', ALLOWED[extOf(row.epub_path)] || 'application/octet-stream');
   res.sendFile(fp);
 });
 
 r.delete('/:id/file', requireOwnedBook, (req, res) => {
-  const fp = path.join(EPUB_DIR, `${req.params.id}.epub`);
-  try { fs.unlinkSync(fp); } catch { /* ignore */ }
+  // Delete what the row actually points at — the file may be a .pdf.
+  const stored = db.prepare('SELECT epub_path FROM library WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.user.id)?.epub_path;
+  if (stored) {
+    try { fs.unlinkSync(path.join(EPUB_DIR, path.basename(stored))); } catch { /* ignore */ }
+  }
   db.prepare('UPDATE library SET epub_path = NULL, last_loc = NULL WHERE id = ? AND user_id = ?')
     .run(req.params.id, req.user.id);
   res.json({ ok: true });
@@ -126,19 +157,17 @@ r.delete('/:id/file', requireOwnedBook, (req, res) => {
 // staging between the two, so reviewing the mapping costs nothing extra — and
 // no automatic guess can silently overwrite a book you already had.
 
-const EPUB_RE = /\.epub$/i;
 const STAGE_NAME_RE = /^[0-9a-f-]{36}$/i;      // a uuid, nothing else
+const STAGED_NAME_RE = /^\d+\.(epub|pdf)$/i;
 
 const importUpload = multer({
   storage: multer.diskStorage({
     destination: (req, _file, cb) => cb(null, req.stageDir),
-    filename: (req, _file, cb) => cb(null, `${req.fileSeq++}.epub`),
+    filename: (req, file, cb) =>
+      cb(null, `${req.fileSeq++}${extOf(file.originalname) || '.epub'}`),
   }),
   limits: { fileSize: 50 * 1024 * 1024, files: 60 },
-  fileFilter: (_req, file, cb) => {
-    const ok = EPUB_RE.test(file.originalname) || file.mimetype === 'application/epub+zip';
-    cb(ok ? null : new Error('only_epub'), ok);
-  },
+  fileFilter: acceptBook,
 });
 
 r.post('/import', (req, res) => {
@@ -202,7 +231,7 @@ r.post('/import/:importId/commit', (req, res) => {
     // so treat it as hostile: basename only, and it must resolve inside stageDir.
     const staged = path.basename(String(d.stagedAs || ''));
     const src = path.join(stageDir, staged);
-    if (!/^\d+\.epub$/.test(staged) || !fs.existsSync(src)) {
+    if (!STAGED_NAME_RE.test(staged) || !fs.existsSync(src)) {
       results.push({ stagedAs: d.stagedAs, ok: false, error: 'missing' });
       continue;
     }
@@ -224,8 +253,16 @@ r.post('/import/:importId/commit', (req, res) => {
 
       // Move, then record. If the rename fails the DB still points at whatever
       // was there before, which is recoverable; the reverse would not be.
-      fs.renameSync(src, path.join(EPUB_DIR, `${bookId}.epub`));
-      attach.run(`${bookId}.epub`, bookId, req.user.id);
+      // Attaching a PDF over a book that had an EPUB (or vice versa) must not
+      // orphan the old file under the other extension.
+      const ext = extOf(staged) || '.epub';
+      const prev = db.prepare('SELECT epub_path FROM library WHERE id = ? AND user_id = ?')
+        .get(bookId, req.user.id)?.epub_path;
+      if (prev && prev !== `${bookId}${ext}`) {
+        try { fs.unlinkSync(path.join(EPUB_DIR, path.basename(prev))); } catch { /* gone */ }
+      }
+      fs.renameSync(src, path.join(EPUB_DIR, `${bookId}${ext}`));
+      attach.run(`${bookId}${ext}`, bookId, req.user.id);
       results.push({ stagedAs: staged, ok: true, action: d.action, bookId });
     } catch (e) {
       results.push({ stagedAs: staged, ok: false, error: e.message });

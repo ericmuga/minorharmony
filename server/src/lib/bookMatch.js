@@ -15,7 +15,7 @@ const STOP = new Set([
 // Strip the noise real downloads carry: "(z-lib.org)", "[EPUB]", "v2", trailing
 // numbers in brackets, and the extension itself.
 const NOISE = [
-  /\.epub$/i,
+  /\.(epub|pdf)$/i,
   /\((?:z-lib\.org|zlibrary|libgen|annas?[- ]archive)[^)]*\)/ig,
   /\[[^\]]*\]/g,
   /\((?:epub|mobi|pdf|retail|ebook)\)/ig,

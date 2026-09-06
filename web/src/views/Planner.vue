@@ -103,8 +103,8 @@ onMounted(load);
     </div>
 
     <!-- Hourly grid: my blocks (left) + calendar feeds (right) over one timeline -->
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <div style="width:46px;flex:0 0 auto;position:relative" :style="{height: hours.length*HOUR_PX+'px'}">
+    <div class="daygrid" style="display:flex;gap:8px;margin-top:8px">
+      <div class="gutter" style="width:46px;flex:0 0 auto;position:relative" :style="{height: hours.length*HOUR_PX+'px'}">
         <div v-for="h in hours" :key="h" class="small muted"
           :style="{position:'absolute',top:y(h*60)+'px',right:'4px'}">{{ String(h).padStart(2,'0') }}:00</div>
       </div>
@@ -120,7 +120,10 @@ onMounted(load);
       </div>
 
       <!-- Read-only calendar feeds -->
-      <div style="width:34%;flex:0 0 auto;position:relative" :style="{height: hours.length*HOUR_PX+'px'}">
+      <div class="feeds" style="width:34%;flex:0 0 auto;position:relative" :style="{height: hours.length*HOUR_PX+'px'}">
+        <!-- Only shown once the feeds stack below the blocks, where the column
+             is no longer self-evidently the calendar side. -->
+        <div class="feedcap sectlabel">Calendar</div>
         <div v-for="(e,i) in day.events" :key="i"
           :style="{position:'absolute',left:'4px',right:'2px',top:y(eventMin(e.start_utc))+'px',
                    borderLeft:'4px solid '+(e.color||'#3a6ea5'),background:'#f7f2e6',
@@ -135,3 +138,27 @@ onMounted(load);
     </div>
   </div>
 </template>
+
+<style scoped>
+.feedcap { display: none; }
+
+/* On a phone a 34%-wide calendar column is unreadable — event titles wrap to
+   one word per line. Below this width the two timelines stack instead, each
+   full width, with a caption so the second one is obviously the calendar. */
+@media (max-width: 700px) {
+  .daygrid { flex-wrap: wrap; }
+  .feeds {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    margin-top: 26px;
+    border-left: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .feedcap {
+    display: block;
+    position: absolute;
+    top: -24px; left: 4px;
+    margin: 0;
+  }
+}
+</style>

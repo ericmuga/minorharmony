@@ -41,3 +41,59 @@ input,select,textarea{font-family:var(--body)}
 .pill{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#f7f1e3;background:var(--sage);
       border-radius:20px;padding:1px 9px;margin-left:6px}
 .pill.now{background:var(--ox)} .pill.soon{background:var(--gold)} .pill.foundation{background:var(--gold)}
+
+/* ---------------------------------------------------------------------------
+   Mobile. The app is used on a phone as much as a laptop, so this isn't a
+   fallback layer — it's the layout that has to feel deliberate.
+   --------------------------------------------------------------------------- */
+
+/* Long titles and pasted URLs must not push the page sideways. Nothing here
+   scrolls horizontally except the few things that opt in (the nav, the day
+   grid), and those scroll inside themselves. */
+html, body { overflow-x: hidden; }
+.rowtext .main, .rowtext .sub { overflow-wrap: anywhere; }
+
+/* The nav is a horizontal strip that scrolls rather than wrapping into three
+   ragged lines. Momentum scrolling, and the scrollbar hidden so it reads as a
+   strip of links, not a widget. */
+.appnav {
+  display: flex; gap: 6px; flex: 1;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.appnav::-webkit-scrollbar { display: none; }
+.appnav > a { white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .appshell { padding: 0 10px 96px; }
+  .appheader { padding: 14px 2px 10px; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .appheader .brand { font-size: 24px; }
+
+  .card { padding: 13px; border-radius: 12px; margin-bottom: 12px; }
+  .card h2 { font-size: 20px; }
+
+  /* Side-by-side inputs become stacked ones — at 360px a two-up row leaves
+     each field too narrow to read what you typed. */
+  .addbar { flex-wrap: wrap; }
+  .addbar > .field { flex: 1 1 100%; }
+  .addbar > .btn { flex: 0 0 auto; }
+
+  /* iOS zooms the whole page when you focus an input under 16px. */
+  .field, input, select, textarea { font-size: 16px; }
+
+  /* Comfortable thumb targets without making the desktop chunky. */
+  .btn { padding: 10px 16px; }
+  .btn.small { padding: 7px 12px; font-size: 13.5px; }
+  .delx { font-size: 22px; padding: 4px 6px; }
+
+  .row { padding: 9px 4px; gap: 8px; }
+  .sectlabel { margin: 14px 0 5px; }
+}
+
+/* Very narrow phones: let a row's controls fall under the title rather than
+   compressing the title to two words per line. */
+@media (max-width: 430px) {
+  .row { flex-wrap: wrap; }
+  .rowtext { flex: 1 1 100%; }
+  .delx { margin-left: auto; }
+}
