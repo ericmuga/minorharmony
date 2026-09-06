@@ -25,4 +25,10 @@ ensureColumn('library', 'url', 'TEXT');
 ensureColumn('library', 'epub_path', 'TEXT');
 ensureColumn('library', 'last_loc', 'TEXT');
 
+// Deleting a block that came from a recurring activity can't just remove the row:
+// GET /planner/day re-materialises the activity on the next load and the block
+// reappears. Instead we tombstone it — the row stays (so materialisation still
+// sees it and skips) but the day view filters it out. "Skip the gym today."
+ensureColumn('time_blocks', 'dismissed', 'INTEGER NOT NULL DEFAULT 0');
+
 export default db;

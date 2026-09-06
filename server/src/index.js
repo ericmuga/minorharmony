@@ -19,6 +19,7 @@ import counselRoutes from './routes/counsel.routes.js';
 import strugglesRoutes from './routes/struggles.routes.js';
 import peopleRoutes from './routes/people.routes.js';
 import escrivaRoutes from './routes/escriva.routes.js';
+import usersRoutes from './routes/users.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -43,6 +44,7 @@ app.use('/api/counsel', requireAuth, counselRoutes);
 app.use('/api/struggles', requireAuth, strugglesRoutes);
 app.use('/api/people', requireAuth, peopleRoutes);
 app.use('/api/escriva', requireAuth, escrivaRoutes);
+app.use('/api/users', requireAuth, usersRoutes);          // owner-only, enforced inside
 
 // In production, serve the built PWA from web/dist (nginx can also do this directly).
 if (process.env.NODE_ENV === 'production') {

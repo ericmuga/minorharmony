@@ -10,6 +10,7 @@ import Counsel from './views/Counsel.vue';
 import Struggle from './views/Struggle.vue';
 import People from './views/People.vue';
 import Briefing from './views/Briefing.vue';
+import Users from './views/Users.vue';
 
 export default createRouter({
   history: createWebHistory(),
@@ -26,5 +27,6 @@ export default createRouter({
     { path: '/people', component: People },
     { path: '/counsel', component: Counsel },
     { path: '/briefing', component: Briefing },
+    { path: '/logins', component: Users },
   ],
 });

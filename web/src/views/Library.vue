@@ -10,6 +10,14 @@ const editing = ref(null);                // book being edited (or null)
 const uploadingId = ref(null);
 const fileInputs = ref({});               // bookId -> input ref
 
+// ---- bulk import ----
+const bulkInput = ref(null);
+const importing = ref(false);
+const importErr = ref('');
+const review = ref(null);                 // { importId, items[], books[] } or null
+const committing = ref(false);
+const importSummary = ref('');
+
 async function load() {
   books.value = await api.get('/library');
 }
@@ -39,6 +47,72 @@ async function onFile(bookId, ev) {
     uploadingId.value = null;
   }
 }
+
+// Phase 1: upload everything to staging and get back the proposed mapping.
+// Nothing is written to the library until the user confirms in phase 2.
+async function onBulkFiles(ev) {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = '';
+  if (!files.length) return;
+
+  const bad = files.filter(f => !/\.epub$/i.test(f.name));
+  if (bad.length) { importErr.value = `Not an .epub: ${bad.map(f => f.name).join(', ')}`; return; }
+  const tooBig = files.filter(f => f.size > 50 * 1024 * 1024);
+  if (tooBig.length) { importErr.value = `Over 50 MB: ${tooBig.map(f => f.name).join(', ')}`; return; }
+
+  importErr.value = ''; importSummary.value = ''; importing.value = true;
+  try {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    const res = await fetch('/api/library/import', { method: 'POST', credentials: 'include', body: fd });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    const data = await res.json();
+    // Pre-tick only what the server was confident about; everything else the
+    // user has to look at. A file that would replace an existing EPUB is never
+    // pre-ticked, however well the title matched.
+    for (const it of data.items) it.include = it.confident;
+    review.value = data;
+  } catch (e) {
+    importErr.value = 'Import failed: ' + e.message;
+  } finally {
+    importing.value = false;
+  }
+}
+
+// Phase 2: commit the (possibly edited) decisions.
+async function commitImport() {
+  const r = review.value;
+  if (!r) return;
+  committing.value = true;
+  try {
+    const decisions = r.items.map(it => ({
+      stagedAs: it.stagedAs,
+      action: it.include ? it.action : 'skip',
+      bookId: it.bookId,
+      title: it.guess?.title,
+      author: it.guess?.author,
+    }));
+    const out = await api.post(`/library/import/${r.importId}/commit`, { decisions });
+    const done = out.results.filter(x => x.ok && x.action !== 'skip').length;
+    const failed = out.results.filter(x => !x.ok);
+    importSummary.value = `Imported ${done} file${done === 1 ? '' : 's'}.` +
+      (failed.length ? ` ${failed.length} failed: ${failed.map(f => f.error).join(', ')}` : '');
+    review.value = null;
+    await load();
+  } catch (e) {
+    importErr.value = 'Commit failed: ' + e.message;
+  } finally {
+    committing.value = false;
+  }
+}
+
+async function cancelImport() {
+  const id = review.value?.importId;
+  review.value = null;
+  if (id) await api.del(`/library/import/${id}`).catch(() => {});
+}
+
+function kb(n) { return n >= 1024 * 1024 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; }
 
 async function removeFile(b) {
   if (!confirm(`Remove the uploaded EPUB for "${b.title}"?`)) return;
@@ -128,6 +202,73 @@ onMounted(load);
         No titles yet. Add one below — or run <code>npm run seed:lifeos</code> on the server for the defaults.
       </div>
 
+      <div class="sectlabel">Import a shelf</div>
+      <p class="muted small" style="margin:.1em 0 .6em">
+        Drop in several <code>.epub</code> files at once. Each is matched against the titles
+        above by filename; anything that doesn't match becomes a new entry. You confirm
+        before anything is saved.
+      </p>
+      <div class="addbar">
+        <button class="btn ghost" :disabled="importing" @click="bulkInput?.click()">
+          {{ importing ? 'Uploading…' : 'Choose .epub files…' }}
+        </button>
+        <input ref="bulkInput" type="file" multiple accept=".epub,application/epub+zip"
+               style="display:none" @change="onBulkFiles">
+      </div>
+      <p v-if="importErr" class="small" style="color:var(--ox)">{{ importErr }}</p>
+      <p v-if="importSummary" class="small" style="color:var(--gold)">{{ importSummary }}</p>
+    </div>
+
+    <!-- Review the proposed mapping before committing -->
+    <div v-if="review" class="card" style="border-left:3px solid var(--gold)">
+      <h3 style="margin-top:0">Review {{ review.items.length }} file{{ review.items.length === 1 ? '' : 's' }}</h3>
+      <p class="muted small">
+        Untick anything you don't want. Files that would replace an EPUB you already have are
+        left unticked on purpose.
+      </p>
+
+      <div v-for="it in review.items" :key="it.stagedAs" class="improw">
+        <input type="checkbox" v-model="it.include" style="margin-top:4px">
+        <div style="flex:1;min-width:0">
+          <div class="small" style="font-weight:600;word-break:break-all">{{ it.filename }}</div>
+          <div class="small muted">{{ kb(it.size) }}</div>
+
+          <div class="addbar" style="margin-top:4px">
+            <select class="field" v-model="it.action">
+              <option value="attach">Attach to existing title</option>
+              <option value="create">Add as new title</option>
+            </select>
+            <select v-if="it.action === 'attach'" class="field" v-model="it.bookId">
+              <option v-for="b in review.books" :key="b.id" :value="b.id">
+                {{ b.title }}{{ b.hasFile ? ' — already has a file' : '' }}
+              </option>
+            </select>
+          </div>
+
+          <div v-if="it.action === 'create'" class="addbar" style="margin-top:4px">
+            <input class="field" type="text" v-model="it.guess.title" placeholder="Title">
+            <input class="field" type="text" v-model="it.guess.author" placeholder="Author">
+          </div>
+
+          <div class="small" style="margin-top:3px">
+            <span v-if="it.action === 'attach' && it.matchedTitle" class="muted">
+              matched “{{ it.matchedTitle }}” · confidence {{ it.score }}
+            </span>
+            <span v-if="it.replaces" style="color:var(--ox)"> · replaces the current EPUB</span>
+            <span v-if="it.note" class="muted"> · {{ it.note }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn" :disabled="committing" @click="commitImport">
+          {{ committing ? 'Saving…' : `Import ${review.items.filter(i => i.include).length} selected` }}
+        </button>
+        <button class="btn ghost" :disabled="committing" @click="cancelImport">Cancel</button>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="sectlabel">Add a title</div>
       <input class="field" type="text" v-model="np.title" placeholder="Title" @keyup.enter="add">
       <div class="addbar">
@@ -166,4 +307,6 @@ onMounted(load);
 .openlink{font-family:var(--serif);font-size:14px;color:var(--ox);text-decoration:none;
           border:1px solid var(--line);border-radius:20px;padding:2px 10px;background:#fdfaf2;white-space:nowrap}
 .openlink:hover{background:#fbf3e0}
+.improw{display:flex;gap:10px;align-items:flex-start;padding:8px 2px;border-top:1px solid var(--line-soft)}
+.improw:first-of-type{border-top:0}
 </style>

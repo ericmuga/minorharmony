@@ -19,6 +19,9 @@ async function logout(){ await auth.logout(); router.push('/login'); }
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/counsel">Counsel</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/briefing">Briefing</router-link>
       </nav>
+      <!-- Kept out of the main nav: it's administration, not a daily tab. -->
+      <router-link v-if="auth.user?.role === 'owner'" class="btn ghost small"
+                   style="text-decoration:none" to="/logins">Logins</router-link>
       <button class="btn ghost small" @click="logout">Sign out</button>
     </header>
     <router-view />

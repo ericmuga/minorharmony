@@ -29,7 +29,9 @@ r.get('/day', (req, res) => {
   tx();
 
   const blocks = db.prepare(
-    'SELECT * FROM time_blocks WHERE user_id = ? AND date = ? ORDER BY start_min').all(req.user.id, date);
+    `SELECT * FROM time_blocks
+      WHERE user_id = ? AND date = ? AND dismissed = 0
+      ORDER BY start_min`).all(req.user.id, date);
 
   // External events whose start falls on this date (compared in local server time).
   const events = db.prepare(
@@ -68,7 +70,20 @@ r.patch('/blocks/:id', (req, res) => {
 });
 
 r.delete('/blocks/:id', (req, res) => {
-  db.prepare('DELETE FROM time_blocks WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+  // A block materialised from a recurring activity must be tombstoned, not deleted:
+  // GET /day re-inserts any activity that has no row for the date, so a hard delete
+  // comes straight back on the next load and the × looks broken. Hand-made blocks
+  // (activity_id IS NULL) are nothing to re-create, so those really are deleted.
+  const row = db.prepare('SELECT activity_id FROM time_blocks WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.user.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+
+  if (row.activity_id == null) {
+    db.prepare('DELETE FROM time_blocks WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+  } else {
+    db.prepare('UPDATE time_blocks SET dismissed = 1 WHERE id = ? AND user_id = ?')
+      .run(req.params.id, req.user.id);
+  }
   res.json({ ok: true });
 });
 
