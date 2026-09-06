@@ -29,6 +29,51 @@ async function load(){
 function shift(n){ const d=new Date(date.value); d.setDate(d.getDate()+n); date.value=d.toISOString().slice(0,10); }
 function today(){ date.value = new Date().toISOString().slice(0,10); }
 
+// ---- one-tap blocks ----
+const presets = ref([]);
+const showPresets = ref(false);       // the manage panel
+const presetMsg = ref('');
+const newPreset = ref(blankPreset());
+
+function blankPreset(){ return { title:'', lane:'prayer', startH:12, startM:0, dur_min:15, daily:true }; }
+function hhmm(min){ return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0'); }
+
+async function loadPresets(){ presets.value = await api.get('/planner/presets'); }
+
+async function applyPresets(ids){
+  const out = await api.post('/planner/presets/apply', { date: date.value, ids });
+  presetMsg.value = out.added
+    ? `Added ${out.added}${out.skipped ? `, ${out.skipped} already there` : ''}.`
+    : 'Already on the day.';
+  setTimeout(() => { presetMsg.value = ''; }, 3000);
+  await load();
+}
+
+async function addPreset(){
+  const p = newPreset.value;
+  if (!p.title.trim()) return;
+  await api.post('/planner/presets', {
+    title: p.title, lane: p.lane, start_min: p.startH*60 + Number(p.startM),
+    dur_min: Number(p.dur_min), daily: p.daily ? 1 : 0,
+    sort: p.startH*60 + Number(p.startM),
+  });
+  newPreset.value = blankPreset();
+  await loadPresets();
+}
+
+async function delPreset(p){
+  if (!confirm(`Remove "${p.title}" from your one-tap blocks? (Blocks already on a day stay.)`)) return;
+  await api.del('/planner/presets/' + p.id);
+  await loadPresets();
+}
+
+async function loadDefaults(){
+  const out = await api.post('/planner/presets/defaults', {});
+  presetMsg.value = out.added ? `Added ${out.added}.` : 'You already have them all.';
+  setTimeout(() => { presetMsg.value = ''; }, 3000);
+  await loadPresets();
+}
+
 // The same panel adds and edits — editingId decides which. A separate edit form
 // would drift from this one every time a field is added.
 const editingId = ref(null);
@@ -73,7 +118,7 @@ async function addCapture(){ const t=newCapture.value.trim(); if(!t) return;
 async function syncCals(){ await api.post('/calendars/sync'); await load(); }
 
 watch(date, load);
-onMounted(load);
+onMounted(() => { load(); loadPresets(); });
 </script>
 
 <template>
@@ -104,6 +149,80 @@ onMounted(load);
     </div>
     <div v-if="capture.length" class="small muted" style="margin-bottom:6px">
       Inbox: <span v-for="c in capture" :key="c.id" style="margin-right:10px">• {{ c.text }}</span>
+    </div>
+
+    <!-- One-tap blocks: the fixed points of the day, placed on demand. -->
+    <div class="quickbar">
+      <span class="muted small" style="white-space:nowrap">One tap:</span>
+      <button v-for="p in presets" :key="p.id" class="qchip" :title="`${hhmm(p.start_min)} · ${p.dur_min} min`"
+              @click="applyPresets([p.id])">
+        {{ p.title }} <span class="qtime">{{ hhmm(p.start_min) }}</span>
+      </button>
+      <button v-if="presets.some(p => p.daily)" class="qchip fill" @click="applyPresets()">
+        ⤓ Fill the day
+      </button>
+      <button class="qchip ghosty" @click="showPresets = !showPresets">
+        {{ presets.length ? 'Edit…' : 'Set these up…' }}
+      </button>
+      <span v-if="presetMsg" class="muted small">{{ presetMsg }}</span>
+    </div>
+
+    <!-- Manage the one-tap list -->
+    <div v-if="showPresets" style="background:#fbf7ec;border:1px solid var(--line-soft);border-radius:12px;padding:14px;margin:8px 0 14px">
+      <div class="sectlabel" style="margin-top:0">One-tap blocks</div>
+      <p class="muted small" style="margin:.1em 0 .7em">
+        These are placed only when you tap them — nothing appears on a day by itself,
+        so the planner stays an honest record of what you actually kept.
+        <strong>Fill the day</strong> places everything marked “daily”.
+      </p>
+
+      <div v-for="p in presets" :key="p.id" class="row" style="align-items:center;gap:8px">
+        <div class="rowtext">
+          <span class="main">{{ p.title }}</span>
+          <div class="sub">{{ hhmm(p.start_min) }} · {{ p.dur_min }} min · {{ p.lane }}
+            <span v-if="p.daily" style="color:var(--gold)"> · daily</span>
+          </div>
+        </div>
+        <button class="delx" @click="delPreset(p)">×</button>
+      </div>
+
+      <div v-if="!presets.length" class="muted small" style="padding:4px 2px">
+        Nothing yet.
+        <button class="btn ghost small" @click="loadDefaults">Start with the classic set</button>
+        — heroic minute, morning offering, mental prayer, Mass, Angelus, lunch, visit, examen.
+      </div>
+      <div v-else style="margin:6px 0">
+        <button class="btn ghost small" @click="loadDefaults">Add any missing classics</button>
+      </div>
+
+      <div class="sectlabel">Add your own</div>
+      <input class="field" v-model="newPreset.title" placeholder="Name (e.g. Angelus, school run, stand-up)"
+             @keyup.enter="addPreset">
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        <select class="field" style="width:auto" v-model.number="newPreset.startH">
+          <option v-for="h in 24" :key="h-1" :value="h-1">{{ String(h-1).padStart(2,'0') }}:00</option>
+        </select>
+        <select class="field" style="width:auto" v-model.number="newPreset.startM">
+          <option :value="0">:00</option><option :value="15">:15</option>
+          <option :value="30">:30</option><option :value="45">:45</option>
+        </select>
+        <select class="field" style="width:auto" v-model.number="newPreset.dur_min">
+          <option :value="5">5 min</option><option :value="10">10 min</option><option :value="15">15 min</option>
+          <option :value="30">30 min</option><option :value="45">45 min</option><option :value="60">1 h</option>
+        </select>
+        <select class="field" style="width:auto" v-model="newPreset.lane">
+          <option value="prayer">Prayer</option>
+          <option value="personal">Personal / Family</option>
+          <option value="wellbeing">Wellbeing</option>
+          <option value="formation">Formation</option>
+          <option value="farmerschoice">Farmers Choice</option>
+          <option value="primehub">Primehub</option>
+        </select>
+        <label class="small" style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+          <input type="checkbox" v-model="newPreset.daily"> in “Fill the day”
+        </label>
+        <button class="btn" @click="addPreset">Add</button>
+      </div>
     </div>
 
     <!-- Add-block panel -->
@@ -178,6 +297,29 @@ onMounted(load);
 
 <style scoped>
 .feedcap { display: none; }
+
+/* The one-tap strip scrolls rather than wrapping: on a phone a dozen chips
+   would otherwise push the whole grid down the page. */
+.quickbar {
+  display: flex; align-items: center; gap: 6px;
+  margin: 10px 0 4px; padding-bottom: 2px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.quickbar::-webkit-scrollbar { display: none; }
+.qchip {
+  flex: 0 0 auto;
+  font-family: var(--serif); font-size: 14px; color: #5b2020;
+  background: #fbf3e0; border: 1px solid var(--line); border-radius: 20px;
+  padding: 4px 12px; white-space: nowrap;
+}
+.qchip:hover { border-color: var(--gold); }
+.qtime { color: var(--ink-soft); font-size: 12px; margin-left: 3px; }
+.qchip.fill { background: var(--ox); color: #f7f1e3; border-color: var(--ox); }
+.qchip.ghosty { background: transparent; border-style: dashed; color: var(--ink-soft); }
+
+@media (hover: none) and (pointer: coarse) {
+  .qchip { padding: 7px 14px; font-size: 15px; }
+}
 
 /* On a phone a 34%-wide calendar column is unreadable — event titles wrap to
    one word per line. Below this width the two timelines stack instead, each

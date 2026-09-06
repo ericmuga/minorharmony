@@ -87,6 +87,129 @@ r.delete('/blocks/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- One-tap blocks -------------------------------------------------------
+// The fixed points of the day. Deliberately not auto-materialised the way
+// recurring_activities are: you tap to place them, so a day you never planned
+// doesn't fill up with norms you didn't actually keep.
+
+const LANES = ['primehub','farmerschoice','personal','prayer','wellbeing','formation'];
+
+// What a Christian working day is usually pegged to. Offered as a starting
+// point rather than seeded, so an existing install can take them or not.
+// `sort` mirrors start_min here, matching what the UI sets when you add your
+// own — otherwise the two orderings interleave badly and a preset you added
+// jumps above the whole classic set.
+const DEFAULT_PRESETS = [
+  { title: 'Heroic minute',            lane: 'prayer',   start_min: 5*60,      dur_min: 5,  daily: 1,
+    prayer_tag: 'Up at once, no negotiating with the alarm' },
+  { title: 'Morning offering',         lane: 'prayer',   start_min: 5*60+10,   dur_min: 10, daily: 1 },
+  { title: 'Mental prayer',            lane: 'prayer',   start_min: 6*60,      dur_min: 30, daily: 1 },
+  { title: 'Holy Mass',                lane: 'prayer',   start_min: 6*60+30,   dur_min: 45, daily: 0 },
+  { title: 'Angelus',                  lane: 'prayer',   start_min: 12*60,     dur_min: 5,  daily: 1 },
+  { title: 'Lunch',                    lane: 'personal', start_min: 13*60,     dur_min: 45, daily: 1 },
+  { title: 'Visit to the Blessed Sacrament', lane: 'prayer', start_min: 18*60, dur_min: 15, daily: 0 },
+  { title: 'Examen',                   lane: 'prayer',   start_min: 21*60+30,  dur_min: 10, daily: 1 },
+].map(p => ({ ...p, sort: p.start_min }));
+
+function cleanPreset(b) {
+  const start = Number(b?.start_min);
+  const dur = Number(b?.dur_min);
+  return {
+    title: String(b?.title || '').trim(),
+    lane: LANES.includes(b?.lane) ? b.lane : 'prayer',
+    start_min: Number.isFinite(start) ? Math.max(0, Math.min(24*60 - 1, Math.round(start))) : null,
+    dur_min: Number.isFinite(dur) ? Math.max(5, Math.min(12*60, Math.round(dur))) : 15,
+    offering: (b?.offering || '').trim() || null,
+    prayer_tag: (b?.prayer_tag || '').trim() || null,
+    daily: b?.daily ? 1 : 0,
+    sort: Number.isFinite(Number(b?.sort)) ? Number(b.sort) : 0,
+  };
+}
+
+r.get('/presets', (req, res) =>
+  res.json(db.prepare(
+    'SELECT * FROM block_presets WHERE user_id = ? ORDER BY sort, start_min').all(req.user.id)));
+
+r.post('/presets', (req, res) => {
+  const p = cleanPreset(req.body);
+  if (!p.title) return res.status(400).json({ error: 'title_required' });
+  if (p.start_min == null) return res.status(400).json({ error: 'start_required' });
+  const info = db.prepare(
+    `INSERT INTO block_presets (user_id,title,lane,start_min,dur_min,offering,prayer_tag,daily,sort)
+     VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(req.user.id, p.title, p.lane, p.start_min, p.dur_min, p.offering, p.prayer_tag, p.daily, p.sort);
+  res.json({ id: info.lastInsertRowid, ...p });
+});
+
+r.patch('/presets/:id', (req, res) => {
+  const fields = ['title','lane','start_min','dur_min','offering','prayer_tag','daily','sort'];
+  const p = cleanPreset({ ...db.prepare('SELECT * FROM block_presets WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.user.id), ...req.body });
+  if (!p.title) return res.status(400).json({ error: 'title_required' });
+  db.prepare(`UPDATE block_presets SET ${fields.map(f => `${f} = ?`).join(', ')}
+              WHERE id = ? AND user_id = ?`)
+    .run(...fields.map(f => p[f]), req.params.id, req.user.id);
+  res.json({ ok: true });
+});
+
+r.delete('/presets/:id', (req, res) => {
+  db.prepare('DELETE FROM block_presets WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+  res.json({ ok: true });
+});
+
+// Offer the classic set. Skips any title the user already has, so pressing it
+// twice doesn't duplicate and it can be used to top up after adding one by hand.
+r.post('/presets/defaults', (req, res) => {
+  const have = new Set(db.prepare('SELECT title FROM block_presets WHERE user_id = ?')
+    .all(req.user.id).map(r0 => r0.title.toLowerCase()));
+  const ins = db.prepare(
+    `INSERT INTO block_presets (user_id,title,lane,start_min,dur_min,offering,prayer_tag,daily,sort)
+     VALUES (?,?,?,?,?,?,?,?,?)`);
+  let added = 0;
+  db.transaction(() => {
+    for (const d of DEFAULT_PRESETS) {
+      if (have.has(d.title.toLowerCase())) continue;
+      const p = cleanPreset(d);
+      ins.run(req.user.id, p.title, p.lane, p.start_min, p.dur_min, p.offering, p.prayer_tag, p.daily, p.sort);
+      added++;
+    }
+  })();
+  res.json({ ok: true, added });
+});
+
+// Place presets onto a date. With no ids, places everything marked `daily`.
+// Skipping a preset already on the day makes this safe to tap twice — the
+// common case is topping up a day you half-planned this morning.
+r.post('/presets/apply', (req, res) => {
+  const { date, ids } = req.body || {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return res.status(400).json({ error: 'bad_date' });
+
+  const chosen = Array.isArray(ids) && ids.length
+    ? db.prepare(`SELECT * FROM block_presets
+                   WHERE user_id = ? AND id IN (${ids.map(() => '?').join(',')})`)
+        .all(req.user.id, ...ids)
+    : db.prepare('SELECT * FROM block_presets WHERE user_id = ? AND daily = 1 ORDER BY sort, start_min')
+        .all(req.user.id);
+
+  const exists = db.prepare(
+    `SELECT 1 FROM time_blocks
+      WHERE user_id = ? AND date = ? AND title = ? AND start_min = ? AND dismissed = 0`);
+  const ins = db.prepare(
+    `INSERT INTO time_blocks (user_id,date,start_min,end_min,title,lane,offering,prayer_tag)
+     VALUES (?,?,?,?,?,?,?,?)`);
+
+  let added = 0, skipped = 0;
+  db.transaction(() => {
+    for (const p of chosen) {
+      if (exists.get(req.user.id, date, p.title, p.start_min)) { skipped++; continue; }
+      ins.run(req.user.id, date, p.start_min, p.start_min + p.dur_min,
+              p.title, p.lane, p.offering, p.prayer_tag);
+      added++;
+    }
+  })();
+  res.json({ ok: true, added, skipped });
+});
+
 // Apply a saved day-template's blocks onto a date.
 r.post('/apply-template', (req, res) => {
   const { date, template_id } = req.body || {};

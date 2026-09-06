@@ -178,3 +178,22 @@ CREATE TABLE IF NOT EXISTS briefings (
   UNIQUE(user_id, topic, date)
 );
 CREATE INDEX IF NOT EXISTS idx_briefings_user_date ON briefings(user_id, date);
+
+-- ---- One-tap blocks: the fixed points of the day (Angelus, Visit, Lunch,
+-- heroic minute…). Unlike recurring_activities these are NOT materialised
+-- automatically — you tap to place them, so an unplanned day stays honest
+-- about what was actually kept. `daily` marks the ones "Fill the day" places
+-- in one go.
+CREATE TABLE IF NOT EXISTS block_presets (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  lane TEXT NOT NULL DEFAULT 'prayer',
+  start_min INTEGER NOT NULL,
+  dur_min INTEGER NOT NULL DEFAULT 15,
+  offering TEXT,
+  prayer_tag TEXT,
+  daily INTEGER NOT NULL DEFAULT 0,
+  sort INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_presets_user ON block_presets(user_id, sort);
