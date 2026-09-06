@@ -150,9 +150,12 @@ cat <<EOF
 
   (a) Create your login (interactive — sets your password). Run as root, NOT as
       $APP_RUN_USER: that user has no writable HOME, so npm can't make its cache.
-      Hand the DB back afterwards or the service can't write to it.
-        cd $REPO_DIR/server && npm run create-user
-        npm run seed                                  # activities + briefing topics
+      PATH=/usr/bin is not optional — root's nvm default is Node 16, which has no
+      node:readline/promises and dies on create-user. Hand the DB back afterwards
+      or the service can't write to it.
+        cd $REPO_DIR/server
+        PATH=/usr/bin npm run create-user
+        PATH=/usr/bin npm run seed                    # activities + briefing topics
         chown -R $APP_RUN_USER:$APP_RUN_USER $REPO_DIR/server/data
 
   (b) Get TLS. $CERT_DOMAINS already resolve to this box.

@@ -95,13 +95,23 @@ Then create your login:
 
 ```bash
 cd /var/www/serviam/server
-npm run create-user                                   # interactive: sets your password
-npm run seed                                          # activities + briefing topics
+PATH=/usr/bin npm run create-user                     # interactive: sets your password
+PATH=/usr/bin npm run seed                            # activities + briefing topics
 chown -R www-data:www-data /var/www/serviam/server/data
 ```
 
 Run these as root, then hand the DB back to `www-data` — running npm *as* `www-data`
 fails on this box because that user has no writable `HOME` for the npm cache.
+
+The `PATH=/usr/bin` prefix is what makes these work in an interactive root shell, where
+nvm's Node 16 is on PATH. Without it `create-user` dies immediately:
+
+```
+Error [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:readline/promises
+```
+
+`node:readline/promises` arrived in Node 17. Same root cause as the `better-sqlite3` ABI
+trap above, different symptom — see the Node warning in this section.
 
 ### Smoke-test without touching DNS
 
