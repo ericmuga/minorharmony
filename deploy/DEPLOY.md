@@ -5,52 +5,61 @@ It is **shared** with ~20 other production vhosts (`prime-till.com`, `primehubon
 so nothing here may touch system-wide packages. In particular: **never downgrade Node** —
 `bootstrap.sh` will refuse to, and CI only checks for Node >= 20.
 
-Domain: `serviam.minorharmony.com`, registered via **hostblast / GoCheapWeb**
-(nameservers `NS1.GOCHEAPWEB.COM`, `NS2.GOCHEAPWEB.COM`).
+Domain: **`minorharmony.com`** (apex + `www`) for now; `serviam.minorharmony.com` later —
+see §1. Registered via **hostblast / GoCheapWeb**, but DNS is *not* served there.
 
 ---
 
-## 1. DNS — point the subdomain at the VPS
+## 1. DNS — we're live on the apex, not the subdomain
 
-> **Current state (checked 2026-08-29): the whole `minorharmony.com` zone is broken.**
-> Both nameservers answer `REFUSED` for the zone, so *nothing* under the domain resolves —
-> not just `serviam`. The registration itself is fine (active, expires 2027-04-30).
-> That means the zone is missing on the DNS servers, so you must **recreate the zone before
-> the A record will do anything**.
+> **Current state (checked 2026-09-06).** The zone recovered, but it **moved**. Delegation is
+> now `ns1/ns2/ns3.dnsowl.com` (Namecheap FreeDNS); the old `NS*.GOCHEAPWEB.COM` still answer
+> `REFUSED`. So the apex works and the subdomain does not:
+>
+> | Query | Answer |
+> |---|---|
+> | `minorharmony.com` @8.8.8.8 | `46.202.160.133` ✅ |
+> | `www.minorharmony.com` @ns1.dnsowl.com | `46.202.160.133` ✅ |
+> | `serviam.minorharmony.com` @ns1.dnsowl.com | **NXDOMAIN** ❌ |
+>
+> HostBlast support did add the `serviam` A record on 2026-09-06, but in *their* zone — which
+> nothing queries, because delegation points at dnsowl. Their record will never take effect
+> while the NS records stay as they are.
 
-In the hostblast control panel:
+**Therefore: Serviam is served on the apex.** `deploy/nginx.conf` claims
+`minorharmony.com www.minorharmony.com serviam.minorharmony.com`, and the cert covers the
+first two. Nothing is blocked on DNS.
 
-1. Log in → find **DNS Zone Editor** (sometimes under "Domains" → "Manage DNS", or via cPanel).
-2. Check whether a zone for `minorharmony.com` exists.
-   - **If it does not** — create it. That is the actual fix; the A record alone won't help.
-   - **If it does but nothing resolves** — the domain isn't attached to the DNS service on
-     that account. Raise a ticket: *"minorharmony.com is delegated to NS1/NS2.GOCHEAPWEB.COM
-     but both return REFUSED for the zone. Please (re)create and activate the zone."*
-3. Add the record:
+> Note that before this vhost existed, `minorharmony.com` did resolve but had no server block,
+> so nginx fell through to the default vhost and served **Prime Till** under a mismatched cert.
+> If you ever see Prime Till at minorharmony.com again, the symlink in `sites-enabled` is gone.
 
-   | Field | Value |
-   |---|---|
-   | Type | `A` |
-   | Name / Host | `serviam` (some panels want the FQDN: `serviam.minorharmony.com`) |
-   | Points to / Value | `46.202.160.133` |
-   | TTL | `300` (raise to 3600 once it's stable) |
+### Adding `serviam.` later
 
-4. Save, then verify from your laptop — **do not skip this**, certbot will fail otherwise:
+1. Add the record where the zone actually lives — the **Namecheap account** holding
+   `minorharmony.com` (Domain List → Manage → Advanced DNS; `dnsowl` is Namecheap FreeDNS):
+
+   | Type | Host | Value | TTL |
+   |---|---|---|---|
+   | `A` | `serviam` | `46.202.160.133` | `300` |
+
+   Doing it at HostBlast/GoCheapWeb accomplishes nothing unless the nameservers move back —
+   and their zone is empty, so moving them would take the apex down too. Don't.
+
+2. Verify — **do not skip this**, certbot fails on a name that doesn't resolve:
 
    ```bash
-   nslookup serviam.minorharmony.com 8.8.8.8
-   # expect: Address: 46.202.160.133
+   nslookup serviam.minorharmony.com 8.8.8.8      # expect: 46.202.160.133
    ```
 
-   Your local resolver is an internal one (`100.100.2.22`) that currently SERVFAILs on this
-   domain, so always query `8.8.8.8` or `1.1.1.1` explicitly when checking.
+   Your local resolver is an internal one that SERVFAILs on this domain, so always query
+   `8.8.8.8` explicitly.
 
-5. Propagation at TTL 300 is usually minutes, but a fresh zone can take up to a few hours.
+3. nginx already answers for the name — just add it to the cert (§3).
 
-**Later: moving to Hostinger.** Do the transfer *after* the site is up and stable. Order:
-create the zone at Hostinger with the same `serviam` A record first, let it sit, then switch
-the nameservers at the registrar. That way the record already exists when delegation flips
-and there's no outage.
+**Later: moving to Hostinger.** Do the transfer *after* the site is stable. Create the zone at
+Hostinger with the apex, `www` and `serviam` records first, let it sit, then switch the
+nameservers at the registrar, so the records exist before delegation flips.
 
 ---
 
@@ -94,13 +103,13 @@ chown -R www-data:www-data /var/www/serviam/server/data
 Run these as root, then hand the DB back to `www-data` — running npm *as* `www-data`
 fails on this box because that user has no writable `HOME` for the npm cache.
 
-### Smoke-test before DNS exists
+### Smoke-test without touching DNS
 
-You can prove the whole stack works without waiting for the A record:
+Proves the whole stack works regardless of which name you're serving:
 
 ```bash
 curl -s http://127.0.0.1:8787/api/health                                   # {"ok":true}
-curl -sI -H 'Host: serviam.minorharmony.com' http://46.202.160.133/         # 200 from nginx
+curl -sI -H 'Host: minorharmony.com' http://46.202.160.133/                 # 200 from nginx
 ```
 
 Login won't work over plain HTTP while `SECURE_COOKIES=true`, which is why bootstrap leaves
@@ -108,12 +117,23 @@ it `false` until TLS is in place (step 3).
 
 ---
 
-## 3. TLS — only once DNS resolves
+## 3. TLS
+
+Both apex names already resolve, so this can run now:
 
 ```bash
-sudo certbot --nginx -d serviam.minorharmony.com
+sudo certbot --nginx -d minorharmony.com -d www.minorharmony.com
 sudo sed -i 's|^SECURE_COOKIES=.*|SECURE_COOKIES=true|' /var/www/serviam/.env
+sudo sed -i 's|^APP_ORIGIN=.*|APP_ORIGIN=https://minorharmony.com|' /var/www/serviam/.env
 sudo systemctl restart serviam
+```
+
+Once `serviam.minorharmony.com` resolves (§1), add it to the **same** cert rather than issuing
+a second one — `--expand` must list every name you want, not just the new one:
+
+```bash
+sudo certbot --nginx --expand \
+  -d minorharmony.com -d www.minorharmony.com -d serviam.minorharmony.com
 ```
 
 certbot rewrites the vhost in place to add the 443 block and the redirect. Because the vhost

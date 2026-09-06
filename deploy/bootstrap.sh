@@ -25,8 +25,14 @@ export PATH="/usr/bin:$PATH"
 hash -r
 
 REPO_DIR="/var/www/serviam"
-DOMAIN="serviam.minorharmony.com"
+# The apex is the live home for now — it already resolves to this box, so certbot
+# can issue today. serviam.minorharmony.com does NOT resolve yet (the zone moved to
+# dnsowl and the record was never added there); it's in the vhost's server_name
+# ready to go, but it stays out of CERT_DOMAINS until it resolves. See DEPLOY.md §1.
+DOMAIN="minorharmony.com"
+CERT_DOMAINS="minorharmony.com www.minorharmony.com"
 VHOST="$DOMAIN.conf"                                  # matches this box's naming convention
+STALE_VHOSTS="serviam.minorharmony.com.conf"          # from the pre-apex layout
 DEPLOY_USER="${DEPLOY_USER:-serviam_deploy_user}"
 APP_RUN_USER="www-data"                               # who systemd launches node as
 
@@ -107,6 +113,14 @@ sudo systemctl enable --now serviam serviam-sync.timer serviam-digest.timer
 sudo systemctl status serviam --no-pager | head -5 || true
 
 echo "==> [7/9] nginx vhost (symlinked)"
+# An earlier run may have enabled the same file under the old name. Two symlinks to
+# one config means nginx loads the server block twice and warns about a conflicting
+# server_name, so drop the stale ones first.
+for stale in $STALE_VHOSTS; do
+  if [[ "$stale" != "$VHOST" ]]; then
+    sudo rm -f "/etc/nginx/sites-enabled/$stale" "/etc/nginx/sites-available/$stale"
+  fi
+done
 sudo ln -sf "$REPO_DIR/deploy/nginx.conf" "/etc/nginx/sites-available/$VHOST"
 sudo ln -sf "/etc/nginx/sites-available/$VHOST" "/etc/nginx/sites-enabled/$VHOST"
 sudo nginx -t
@@ -125,8 +139,10 @@ cat <<EOF
   (a) Create your login (interactive — sets your password):
         cd $REPO_DIR/server && sudo -u $APP_RUN_USER npm run create-user
 
-  (b) Get TLS (only after DNS for $DOMAIN points to this box):
-        sudo certbot --nginx -d $DOMAIN
+  (b) Get TLS. $CERT_DOMAINS already resolve to this box:
+        sudo certbot --nginx -d minorharmony.com -d www.minorharmony.com
+      Later, once serviam.minorharmony.com resolves, add it to the same cert:
+        sudo certbot --nginx --expand -d minorharmony.com -d www.minorharmony.com -d serviam.minorharmony.com
       Then flip the cookie to Secure and restart:
         sudo sed -i 's|^SECURE_COOKIES=.*|SECURE_COOKIES=true|' $REPO_DIR/.env
         sudo systemctl restart serviam
