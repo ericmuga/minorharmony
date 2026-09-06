@@ -148,8 +148,12 @@ sudo visudo -c >/dev/null
 echo "==> [9/9] Done. Remaining manual steps:"
 cat <<EOF
 
-  (a) Create your login (interactive — sets your password):
-        cd $REPO_DIR/server && sudo -u $APP_RUN_USER npm run create-user
+  (a) Create your login (interactive — sets your password). Run as root, NOT as
+      $APP_RUN_USER: that user has no writable HOME, so npm can't make its cache.
+      Hand the DB back afterwards or the service can't write to it.
+        cd $REPO_DIR/server && npm run create-user
+        npm run seed                                  # activities + briefing topics
+        chown -R $APP_RUN_USER:$APP_RUN_USER $REPO_DIR/server/data
 
   (b) Get TLS. $CERT_DOMAINS already resolve to this box.
       NOTE: certonly, not --nginx -- the nginx installer is broken on this box
@@ -164,7 +168,8 @@ cat <<EOF
         sudo sed -i 's|^SECURE_COOKIES=.*|SECURE_COOKIES=true|' $REPO_DIR/.env
         sudo systemctl restart serviam
 
-  (c) Generate the GitHub Actions deploy key:
+  (c) Generate the GitHub Actions deploy key — SKIP if Actions already deploys
+      green; this would only churn a working key:
         ssh-keygen -t ed25519 -f ~/.ssh/serviam_deploy -N "" -C "github-actions"
         cat ~/.ssh/serviam_deploy.pub >> ~/.ssh/authorized_keys
         cat ~/.ssh/serviam_deploy    # paste into GitHub -> production env -> DEPLOY_SSH_KEY
