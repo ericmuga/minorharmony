@@ -200,6 +200,8 @@ onBeforeUnmount(() => {
       </template>
       <button class="btn ghost" @click="next">Next →</button>
     </div>
+    <!-- Keyboard hints are noise on a touch device and were crowding the paging
+         buttons, so they're hidden there rather than just made smaller. -->
     <p v-if="!immersive" class="muted small hint">
       Arrow keys or space flip pages · <strong>F</strong> for full screen · bookmark saves automatically.
     </p>
@@ -254,5 +256,29 @@ onBeforeUnmount(() => {
 .shell.immersive .bar.hidden {
   opacity: 0;
   pointer-events: none;   /* faded bars must not eat taps meant for the page */
+}
+
+/* A device with no hover and a coarse pointer is a phone or tablet: the
+   keyboard hint is meaningless there, and it was squeezing Prev/Next into the
+   same line and making them hard to hit. Keyed off the input device rather
+   than width, because a narrow desktop window still has a keyboard. */
+@media (hover: none) and (pointer: coarse) {
+  .hint { display: none; }
+
+  /* Paging is the primary action on a touch screen, so give it real buttons
+     that split the width instead of two small centred ones. */
+  .bar.bottom {
+    gap: 10px;
+    margin-top: 10px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bar.bottom > .btn {
+    flex: 1 1 0;
+    min-height: 46px;
+    font-size: 17px;
+    background: #fbf3e0;          /* opaque: page text must not read through */
+  }
+  /* The PDF page counter and zoom keep their natural size between them. */
+  .bar.bottom > .btn.small { flex: 0 0 auto; min-width: 46px; }
 }
 </style>
