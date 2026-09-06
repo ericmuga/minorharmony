@@ -117,28 +117,71 @@ it `false` until TLS is in place (step 3).
 
 ---
 
-## 3. TLS
+## 3. TLS — certbot issues, git owns the config
 
-Both apex names already resolve, so this can run now:
+> **Do not use `certbot --nginx` on this box.** Its *installer* parses every vhost's TLS
+> config, and one of the ~20 other sites here references a 1024-bit RSA key, which modern
+> certbot refuses to load:
+>
+> ```
+> Could not install certificate
+> Unsupported RSA key length: 1024
+> ```
+>
+> Our cert is fine — only the install step fails. (`certbot --nginx` will still *issue*
+> happily, which is why the first attempt left a valid cert behind and only errored at the
+> end.) So the 443 block is written by hand in `deploy/nginx.conf`, and certbot runs in
+> `certonly --webroot` mode. That also fixes a second problem: the vhost is a **symlink into
+> the repo**, so anything certbot wrote into it would be destroyed by the next deploy's
+> `git reset --hard`.
+
+Issue (or re-point an existing cert to webroot renewal) — this also drops the broken nginx
+installer from the renewal config, so unattended renewals stop failing:
 
 ```bash
-sudo certbot --nginx -d minorharmony.com -d www.minorharmony.com
+sudo mkdir -p /var/www/certbot/.well-known/acme-challenge
+sudo chown -R www-data:www-data /var/www/certbot
+
+sudo certbot certonly --webroot -w /var/www/certbot \
+  --cert-name minorharmony.com \
+  -d minorharmony.com -d www.minorharmony.com \
+  --deploy-hook "systemctl reload nginx"
+```
+
+Then reload nginx and flip the app to HTTPS:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
 sudo sed -i 's|^SECURE_COOKIES=.*|SECURE_COOKIES=true|' /var/www/serviam/.env
 sudo sed -i 's|^APP_ORIGIN=.*|APP_ORIGIN=https://minorharmony.com|' /var/www/serviam/.env
 sudo systemctl restart serviam
 ```
 
-Once `serviam.minorharmony.com` resolves (§1), add it to the **same** cert rather than issuing
-a second one — `--expand` must list every name you want, not just the new one:
+Verify renewal actually works unattended — **don't skip this**, it's the whole point of the
+webroot switch:
 
 ```bash
-sudo certbot --nginx --expand \
+sudo certbot renew --dry-run
+```
+
+### Adding `serviam.` to the cert later
+
+Once it resolves (§1), expand the **same** cert — `--expand` needs every name listed, not
+just the new one — then add the name to the 443 `server_name` in `deploy/nginx.conf` and
+commit:
+
+```bash
+sudo certbot certonly --webroot -w /var/www/certbot --expand \
+  --cert-name minorharmony.com \
   -d minorharmony.com -d www.minorharmony.com -d serviam.minorharmony.com
 ```
 
-certbot rewrites the vhost in place to add the 443 block and the redirect. Because the vhost
-is a **symlink into the repo**, certbot's edits land in `deploy/nginx.conf` in the working
-tree — commit them, or the next `git reset --hard` in CI will revert your TLS config.
+### Bootstrapping TLS on a *fresh* box
+
+Chicken-and-egg: the webroot challenge needs nginx serving `:80`, but `nginx -t` fails while
+the 443 block points at a cert that doesn't exist yet. `bootstrap.sh` detects this and tells
+you. To break the loop, comment out the second `server { ... }` block in `deploy/nginx.conf`,
+reload, issue the cert, then uncomment and reload again.
 
 ---
 

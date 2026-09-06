@@ -113,6 +113,10 @@ sudo systemctl enable --now serviam serviam-sync.timer serviam-digest.timer
 sudo systemctl status serviam --no-pager | head -5 || true
 
 echo "==> [7/9] nginx vhost (symlinked)"
+# ACME webroot. Must exist before nginx starts serving the challenge location,
+# and must be readable by www-data.
+sudo mkdir -p /var/www/certbot/.well-known/acme-challenge
+sudo chown -R www-data:www-data /var/www/certbot
 # An earlier run may have enabled the same file under the old name. Two symlinks to
 # one config means nginx loads the server block twice and warns about a conflicting
 # server_name, so drop the stale ones first.
@@ -123,6 +127,14 @@ for stale in $STALE_VHOSTS; do
 done
 sudo ln -sf "$REPO_DIR/deploy/nginx.conf" "/etc/nginx/sites-available/$VHOST"
 sudo ln -sf "/etc/nginx/sites-available/$VHOST" "/etc/nginx/sites-enabled/$VHOST"
+# The vhost hardcodes the cert paths, so nginx -t fails hard if the cert isn't
+# issued yet. Say why, instead of letting nginx's error be the only clue.
+if [[ ! -s "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]]; then
+  echo "    ERROR: no cert at /etc/letsencrypt/live/$DOMAIN/ — nginx -t will fail." >&2
+  echo "    Issue it first (DEPLOY.md §3):" >&2
+  echo "      sudo certbot certonly --webroot -w /var/www/certbot -d minorharmony.com -d www.minorharmony.com" >&2
+  exit 1
+fi
 sudo nginx -t
 sudo systemctl reload nginx
 
@@ -139,10 +151,15 @@ cat <<EOF
   (a) Create your login (interactive — sets your password):
         cd $REPO_DIR/server && sudo -u $APP_RUN_USER npm run create-user
 
-  (b) Get TLS. $CERT_DOMAINS already resolve to this box:
-        sudo certbot --nginx -d minorharmony.com -d www.minorharmony.com
-      Later, once serviam.minorharmony.com resolves, add it to the same cert:
-        sudo certbot --nginx --expand -d minorharmony.com -d www.minorharmony.com -d serviam.minorharmony.com
+  (b) Get TLS. $CERT_DOMAINS already resolve to this box.
+      NOTE: certonly, not --nginx -- the nginx installer is broken on this box
+      (a neighbouring vhost has a 1024-bit RSA key). The 443 block is in git.
+        sudo certbot certonly --webroot -w /var/www/certbot \\
+          --cert-name minorharmony.com \\
+          -d minorharmony.com -d www.minorharmony.com \\
+          --deploy-hook "systemctl reload nginx"
+      Later, once serviam.minorharmony.com resolves, expand the same cert and add
+      the name to the 443 server_name in deploy/nginx.conf. See DEPLOY.md 3.
       Then flip the cookie to Secure and restart:
         sudo sed -i 's|^SECURE_COOKIES=.*|SECURE_COOKIES=true|' $REPO_DIR/.env
         sudo systemctl restart serviam
