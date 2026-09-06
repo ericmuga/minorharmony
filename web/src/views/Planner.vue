@@ -29,14 +29,41 @@ async function load(){
 function shift(n){ const d=new Date(date.value); d.setDate(d.getDate()+n); date.value=d.toISOString().slice(0,10); }
 function today(){ date.value = new Date().toISOString().slice(0,10); }
 
-async function addBlock(){
+// The same panel adds and edits — editingId decides which. A separate edit form
+// would drift from this one every time a field is added.
+const editingId = ref(null);
+
+function startEdit(b){
+  editingId.value = b.id;
+  form.value = {
+    title: b.title || '',
+    startH: Math.floor(b.start_min / 60),
+    // The grid's dropdown only offers quarter hours; snap so an odd start time
+    // (a synced activity, say) doesn't silently become :00 on save.
+    startM: [0,15,30,45].reduce((best, m) =>
+      Math.abs(m - b.start_min % 60) < Math.abs(best - b.start_min % 60) ? m : best, 0),
+    durMin: Math.max(15, (b.end_min - b.start_min) || 60),
+    lane: b.lane || 'personal',
+    offering: b.offering || '',
+    prayer_tag: b.prayer_tag || '',
+  };
+  showAdd.value = true;
+}
+
+function cancelEdit(){ editingId.value = null; form.value = blank(); showAdd.value = false; }
+
+async function saveBlock(){
   const f = form.value;
+  if (!f.title.trim()) return;
   const start = f.startH*60 + Number(f.startM);
-  await api.post('/planner/blocks', {
-    date: date.value, start_min: start, end_min: start + Number(f.durMin),
-    title: f.title, lane: f.lane, offering: f.offering, prayer_tag: f.prayer_tag,
-  });
-  form.value = blank(); showAdd.value = false; await load();
+  const body = {
+    start_min: start, end_min: start + Number(f.durMin),
+    title: f.title.trim(), lane: f.lane, offering: f.offering, prayer_tag: f.prayer_tag,
+  };
+  if (editingId.value) await api.patch('/planner/blocks/' + editingId.value, body);
+  else await api.post('/planner/blocks', { date: date.value, ...body });
+  cancelEdit();
+  await load();
 }
 async function toggle(b){ await api.patch('/planner/blocks/'+b.id, { done: b.done?0:1 }); await load(); }
 async function remove(b){ await api.del('/planner/blocks/'+b.id); await load(); }
@@ -69,14 +96,21 @@ onMounted(load);
       <input class="field" v-model="newCapture" placeholder="Brain-dump anything so you don't forget it…" @keyup.enter="addCapture">
       <button class="btn" @click="addCapture">Capture</button>
       <button class="btn ghost" @click="syncCals" title="Refresh Google + Outlook feeds">Sync calendars</button>
-      <button class="btn" @click="showAdd=!showAdd">+ Block</button>
+      <!-- Opening the panel for a new block must drop any half-finished edit,
+           or you'd save your changes onto the wrong block. -->
+      <button class="btn" @click="showAdd ? cancelEdit() : (editingId = null, form = blank(), showAdd = true)">
+        + Block
+      </button>
     </div>
     <div v-if="capture.length" class="small muted" style="margin-bottom:6px">
       Inbox: <span v-for="c in capture" :key="c.id" style="margin-right:10px">• {{ c.text }}</span>
     </div>
 
     <!-- Add-block panel -->
-    <div v-if="showAdd" style="background:#fbf7ec;border:1px solid var(--line-soft);border-radius:12px;padding:14px;margin:8px 0 14px">
+    <div v-if="showAdd" :style="{background:'#fbf7ec',border:'1px solid var(--line-soft)',borderRadius:'12px',
+                                 padding:'14px',margin:'8px 0 14px',
+                                 borderLeft: editingId ? '3px solid var(--ox)' : '1px solid var(--line-soft)'}">
+      <div v-if="editingId" class="sectlabel" style="margin-top:0">Editing this block</div>
       <input class="field" v-model="form.title" placeholder="What is the work? (e.g. BC240 change requests with Victor)">
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
         <select class="field" style="width:auto" v-model.number="form.startH">
@@ -99,7 +133,10 @@ onMounted(load);
       </div>
       <input class="field" style="margin-top:8px" v-model="form.offering" placeholder="Offer this work for… (the morning offering applied to this block)">
       <input class="field" style="margin-top:8px" v-model="form.prayer_tag" placeholder="Prayer / mortification tag (e.g. custody of the tongue in this meeting)">
-      <div style="margin-top:10px"><button class="btn" @click="addBlock">Add to the day</button></div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" @click="saveBlock">{{ editingId ? 'Save changes' : 'Add to the day' }}</button>
+        <button v-if="editingId" class="btn ghost" @click="cancelEdit">Cancel</button>
+      </div>
     </div>
 
     <!-- Hourly grid: my blocks (left) + calendar feeds (right) over one timeline -->
@@ -113,7 +150,7 @@ onMounted(load);
       <div style="flex:1;position:relative;border-left:1px solid var(--line);border-radius:10px;background:repeating-linear-gradient(transparent,transparent 57px,var(--line-soft) 57px,var(--line-soft) 58px)"
            :style="{height: hours.length*HOUR_PX+'px'}">
         <TimeBlock v-for="b in day.blocks" :key="b.id" :block="b" :hour-px="HOUR_PX" :start-hour="START_HOUR"
-          @toggle="toggle" @remove="remove" />
+          @toggle="toggle" @remove="remove" @edit="startEdit" />
         <div v-if="!day.blocks.length" class="muted small serif" style="position:absolute;top:10px;left:12px">
           No blocks yet — plan the day. Weekends and holidays count too.
         </div>

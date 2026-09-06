@@ -1,6 +1,6 @@
 <script setup>
 const props = defineProps({ block:Object, hourPx:Number, startHour:Number });
-const emit = defineEmits(['toggle','remove']);
+const emit = defineEmits(['toggle','remove','edit']);
 const laneColor = { primehub:'#9a7a2e', farmerschoice:'#3a6ea5', personal:'#52614f', prayer:'#742a2a', wellbeing:'#2e8b6b', formation:'#7d5ba6' };
 function y(min){ return (min - props.startHour*60) / 60 * props.hourPx; }
 const top = y(props.block.start_min);
@@ -13,11 +13,21 @@ const col = laneColor[props.block.lane] || '#52614f';
         borderRadius:'8px',padding:'4px 8px',overflow:'hidden',opacity: block.done?0.55:1}">
     <div style="display:flex;gap:6px;align-items:center">
       <strong class="serif" style="font-size:15px;flex:1" :style="block.done?'text-decoration:line-through':''">{{ block.title }}</strong>
-      <button title="done" @click="emit('toggle', block)" style="border:0;background:transparent;color:var(--ox);font-size:14px">✓</button>
-      <button title="remove" @click="emit('remove', block)" style="border:0;background:transparent;color:var(--line);font-size:16px">×</button>
+      <button title="done" @click="emit('toggle', block)" class="blkbtn" style="color:var(--ox);font-size:14px">✓</button>
+      <button title="edit" @click="emit('edit', block)" class="blkbtn" style="color:var(--gold);font-size:13px">✎</button>
+      <button title="remove" @click="emit('remove', block)" class="blkbtn" style="color:var(--line);font-size:16px">×</button>
     </div>
     <div v-if="block.offering || block.prayer_tag" class="small" style="color:var(--ox);font-style:italic">
       ✝ {{ block.offering || block.prayer_tag }}
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Three controls in a block that can be as short as 26px, so they need real
+   hit areas on a phone without pushing the title out of a short block. */
+.blkbtn { border: 0; background: transparent; padding: 2px 4px; line-height: 1; }
+@media (hover: none) and (pointer: coarse) {
+  .blkbtn { padding: 4px 7px; font-size: 16px; }
+}
+</style>
