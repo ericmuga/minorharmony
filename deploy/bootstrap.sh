@@ -25,12 +25,12 @@ export PATH="/usr/bin:$PATH"
 hash -r
 
 REPO_DIR="/var/www/serviam"
-# The apex is the live home for now — it already resolves to this box, so certbot
-# can issue today. serviam.minorharmony.com does NOT resolve yet (the zone moved to
-# dnsowl and the record was never added there); it's in the vhost's server_name
-# ready to go, but it stays out of CERT_DOMAINS until it resolves. See DEPLOY.md §1.
+# serviam.minorharmony.com is the app's home; the apex and www 301 to it. DOMAIN is
+# the cert name and vhost filename (both predate the subdomain, so they keep the
+# apex name); APP_HOST is where the app is actually served. See DEPLOY.md §1.
 DOMAIN="minorharmony.com"
-CERT_DOMAINS="minorharmony.com www.minorharmony.com"
+APP_HOST="serviam.minorharmony.com"
+CERT_DOMAINS="minorharmony.com www.minorharmony.com serviam.minorharmony.com"
 VHOST="$DOMAIN.conf"                                  # matches this box's naming convention
 STALE_VHOSTS="serviam.minorharmony.com.conf"          # from the pre-apex layout
 DEPLOY_USER="${DEPLOY_USER:-serviam_deploy_user}"
@@ -71,7 +71,7 @@ if [[ ! -f .env ]]; then
   SECRET=$(node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")
   sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" .env
   sed -i "s|^NODE_ENV=.*|NODE_ENV=production|" .env
-  sed -i "s|^APP_ORIGIN=.*|APP_ORIGIN=https://$DOMAIN|" .env
+  sed -i "s|^APP_ORIGIN=.*|APP_ORIGIN=https://$APP_HOST|" .env
   # Stays false until certbot has issued a cert, otherwise the browser drops the
   # session cookie over plain HTTP and login silently fails.
   sed -i "s|^SECURE_COOKIES=.*|SECURE_COOKIES=false|" .env
@@ -132,7 +132,7 @@ sudo ln -sf "/etc/nginx/sites-available/$VHOST" "/etc/nginx/sites-enabled/$VHOST
 if [[ ! -s "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]]; then
   echo "    ERROR: no cert at /etc/letsencrypt/live/$DOMAIN/ — nginx -t will fail." >&2
   echo "    Issue it first (DEPLOY.md §3):" >&2
-  echo "      sudo certbot certonly --webroot -w /var/www/certbot -d minorharmony.com -d www.minorharmony.com" >&2
+  echo "      sudo certbot certonly --webroot -w /var/www/certbot --cert-name $DOMAIN $(printf -- '-d %s ' $CERT_DOMAINS)" >&2
   exit 1
 fi
 sudo nginx -t
@@ -163,10 +163,8 @@ cat <<EOF
       (a neighbouring vhost has a 1024-bit RSA key). The 443 block is in git.
         sudo certbot certonly --webroot -w /var/www/certbot \\
           --cert-name minorharmony.com \\
-          -d minorharmony.com -d www.minorharmony.com \\
+          -d minorharmony.com -d www.minorharmony.com -d serviam.minorharmony.com \\
           --deploy-hook "systemctl reload nginx"
-      Later, once serviam.minorharmony.com resolves, expand the same cert and add
-      the name to the 443 server_name in deploy/nginx.conf. See DEPLOY.md 3.
       Then flip the cookie to Secure and restart:
         sudo sed -i 's|^SECURE_COOKIES=.*|SECURE_COOKIES=true|' $REPO_DIR/.env
         sudo systemctl restart serviam
@@ -178,5 +176,5 @@ cat <<EOF
         cat ~/.ssh/serviam_deploy    # paste into GitHub -> production env -> DEPLOY_SSH_KEY
         rm ~/.ssh/serviam_deploy ~/.ssh/serviam_deploy.pub
 
-  Then: https://$DOMAIN
+  Then: https://$APP_HOST
 EOF

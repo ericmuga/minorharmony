@@ -5,57 +5,35 @@ It is **shared** with ~20 other production vhosts (`prime-till.com`, `primehubon
 so nothing here may touch system-wide packages. In particular: **never downgrade Node** —
 `bootstrap.sh` will refuse to, and CI only checks for Node >= 20.
 
-Domain: **`minorharmony.com`** (apex + `www`) for now; `serviam.minorharmony.com` later —
-see §1. Registered via **hostblast / GoCheapWeb**, but DNS is *not* served there.
+Domain: **`serviam.minorharmony.com`** — the app's home. `minorharmony.com` and `www` 301
+to it. Registered via **hostblast / GoCheapWeb**, but DNS is *not* served there.
 
 ---
 
-## 1. DNS — we're live on the apex, not the subdomain
+## 1. DNS
 
-> **Current state (checked 2026-09-06).** The zone recovered, but it **moved**. Delegation is
-> now `ns1/ns2/ns3.dnsowl.com` (Namecheap FreeDNS); the old `NS*.GOCHEAPWEB.COM` still answer
-> `REFUSED`. So the apex works and the subdomain does not:
->
-> | Query | Answer |
-> |---|---|
-> | `minorharmony.com` @8.8.8.8 | `46.202.160.133` ✅ |
-> | `www.minorharmony.com` @ns1.dnsowl.com | `46.202.160.133` ✅ |
-> | `serviam.minorharmony.com` @ns1.dnsowl.com | **NXDOMAIN** ❌ |
->
-> HostBlast support did add the `serviam` A record on 2026-09-06, but in *their* zone — which
-> nothing queries, because delegation points at dnsowl. Their record will never take effect
-> while the NS records stay as they are.
+The zone is served by **Namecheap FreeDNS** (`ns1/ns2/ns3.dnsowl.com`) — edit records in the
+Namecheap account (Domain List → Manage → Advanced DNS), *not* at HostBlast/GoCheapWeb, whose
+nameservers answer `REFUSED` and whose zone nothing queries.
 
-**Therefore: Serviam is served on the apex.** `deploy/nginx.conf` claims
-`minorharmony.com www.minorharmony.com serviam.minorharmony.com`, and the cert covers the
-first two. Nothing is blocked on DNS.
+| Name | Type | Value | Status (2026-09-21) |
+|---|---|---|---|
+| `minorharmony.com` | A | `46.202.160.133` | ✅ |
+| `www` | A | `46.202.160.133` | ✅ |
+| `serviam` | A | `46.202.160.133` | ✅ |
 
-> Note that before this vhost existed, `minorharmony.com` did resolve but had no server block,
-> so nginx fell through to the default vhost and served **Prime Till** under a mismatched cert.
-> If you ever see Prime Till at minorharmony.com again, the symlink in `sites-enabled` is gone.
+Your local resolver is an internal one that SERVFAILs on this domain at times, so check with
+`8.8.8.8` explicitly — certbot fails on a name that doesn't resolve publicly:
 
-### Adding `serviam.` later
+```bash
+nslookup serviam.minorharmony.com 8.8.8.8      # expect: 46.202.160.133
+```
 
-1. Add the record where the zone actually lives — the **Namecheap account** holding
-   `minorharmony.com` (Domain List → Manage → Advanced DNS; `dnsowl` is Namecheap FreeDNS):
-
-   | Type | Host | Value | TTL |
-   |---|---|---|---|
-   | `A` | `serviam` | `46.202.160.133` | `300` |
-
-   Doing it at HostBlast/GoCheapWeb accomplishes nothing unless the nameservers move back —
-   and their zone is empty, so moving them would take the apex down too. Don't.
-
-2. Verify — **do not skip this**, certbot fails on a name that doesn't resolve:
-
-   ```bash
-   nslookup serviam.minorharmony.com 8.8.8.8      # expect: 46.202.160.133
-   ```
-
-   Your local resolver is an internal one that SERVFAILs on this domain, so always query
-   `8.8.8.8` explicitly.
-
-3. nginx already answers for the name — just add it to the cert (§3).
+> If you ever see **Prime Till** (or its certificate) at one of these names, that name has
+> fallen through to nginx's default vhost: either the symlink in `sites-enabled` is gone, or
+> the name is missing from a `server_name` in `deploy/nginx.conf`. That is exactly what
+> happened when `serviam.` first resolved — it was in the `:80` block only, so HTTPS landed on
+> Prime Till's cert.
 
 **Later: moving to Hostinger.** Do the transfer *after* the site is stable. Create the zone at
 Hostinger with the apex, `www` and `serviam` records first, let it sit, then switch the
@@ -119,7 +97,7 @@ Proves the whole stack works regardless of which name you're serving:
 
 ```bash
 curl -s http://127.0.0.1:8787/api/health                                   # {"ok":true}
-curl -sI -H 'Host: minorharmony.com' http://46.202.160.133/                 # 200 from nginx
+curl -sI -H 'Host: serviam.minorharmony.com' http://46.202.160.133/         # 301 → https://serviam.…
 ```
 
 Login won't work over plain HTTP while `SECURE_COOKIES=true`, which is why bootstrap leaves
@@ -154,16 +132,19 @@ sudo chown -R www-data:www-data /var/www/certbot
 
 sudo certbot certonly --webroot -w /var/www/certbot \
   --cert-name minorharmony.com \
-  -d minorharmony.com -d www.minorharmony.com \
+  -d minorharmony.com -d www.minorharmony.com -d serviam.minorharmony.com \
   --deploy-hook "systemctl reload nginx"
 ```
+
+One cert (`--cert-name minorharmony.com`) covers all three names; to add a name later, rerun
+this with `--expand` and **every** name listed, not just the new one.
 
 Then reload nginx and flip the app to HTTPS:
 
 ```bash
 sudo nginx -t && sudo systemctl reload nginx
 sudo sed -i 's|^SECURE_COOKIES=.*|SECURE_COOKIES=true|' /var/www/serviam/.env
-sudo sed -i 's|^APP_ORIGIN=.*|APP_ORIGIN=https://minorharmony.com|' /var/www/serviam/.env
+sudo sed -i 's|^APP_ORIGIN=.*|APP_ORIGIN=https://serviam.minorharmony.com|' /var/www/serviam/.env
 sudo systemctl restart serviam
 ```
 
@@ -174,23 +155,28 @@ webroot switch:
 sudo certbot renew --dry-run
 ```
 
-### Adding `serviam.` to the cert later
+### What "well configured" means here
 
-Once it resolves (§1), expand the **same** cert — `--expand` needs every name listed, not
-just the new one — then add the name to the 443 `server_name` in `deploy/nginx.conf` and
-commit:
+Shared TLS settings are in `deploy/nginx-tls.conf`, included by both 443 blocks:
+Mozilla *intermediate* (TLS 1.2/1.3, ECDHE + AEAD ciphers only), no session tickets. The
+box-wide `nginx.conf` still allows TLS 1.0/1.1 for the other sites — ours overrides it per
+server. No OCSP stapling: Let's Encrypt retired OCSP in 2025.
+
+`serviam.` also sends HSTS (host-only, **no** `includeSubDomains` — other names under
+`minorharmony.com` may not have certs), plus `nosniff`, `X-Frame-Options: DENY` and
+`Referrer-Policy: same-origin`. HSTS starts at one week; bump `max-age` to `31536000` once
+it has run clean. Check from outside with:
 
 ```bash
-sudo certbot certonly --webroot -w /var/www/certbot --expand \
-  --cert-name minorharmony.com \
-  -d minorharmony.com -d www.minorharmony.com -d serviam.minorharmony.com
+curl -sI https://serviam.minorharmony.com | grep -i strict
+# or: https://www.ssllabs.com/ssltest/analyze.html?d=serviam.minorharmony.com
 ```
 
 ### Bootstrapping TLS on a *fresh* box
 
 Chicken-and-egg: the webroot challenge needs nginx serving `:80`, but `nginx -t` fails while
-the 443 block points at a cert that doesn't exist yet. `bootstrap.sh` detects this and tells
-you. To break the loop, comment out the second `server { ... }` block in `deploy/nginx.conf`,
+the 443 blocks point at a cert that doesn't exist yet. `bootstrap.sh` detects this and tells
+you. To break the loop, comment out both `listen 443` blocks in `deploy/nginx.conf`,
 reload, issue the cert, then uncomment and reload again.
 
 ---
