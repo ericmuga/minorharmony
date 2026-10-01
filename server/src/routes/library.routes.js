@@ -82,6 +82,18 @@ r.get('/', (req, res) =>
        FROM library WHERE user_id = ? ORDER BY id`
   ).all(req.user.id)));
 
+r.get('/reading-history', (req, res) => {
+  const days = Math.min(parseInt(req.query.days, 10) || 60, 365);
+  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  res.json(db.prepare(
+    `SELECT rs.id, rs.book_id, l.title, l.author, rs.date, rs.started_at, rs.ended_at,
+            rs.start_loc, rs.end_loc, rs.minutes, rs.note
+       FROM reading_sessions rs JOIN library l ON l.id = rs.book_id
+      WHERE rs.user_id = ? AND rs.date >= ?
+      ORDER BY rs.date DESC, rs.id DESC`
+  ).all(req.user.id, since));
+});
+
 r.post('/', (req, res) => {
   const { title, author, tag, state, url } = req.body || {};
   if (!title) return res.status(400).json({ error: 'title_required' });
@@ -149,6 +161,38 @@ r.delete('/:id/file', requireOwnedBook, (req, res) => {
   db.prepare('UPDATE library SET epub_path = NULL, last_loc = NULL WHERE id = ? AND user_id = ?')
     .run(req.params.id, req.user.id);
   res.json({ ok: true });
+});
+
+r.post('/:id/reading-sessions', requireOwnedBook, (req, res) => {
+  const started = req.body?.started_at ? new Date(req.body.started_at) : new Date();
+  const ended = req.body?.ended_at ? new Date(req.body.ended_at) : new Date();
+  const rawMinutes = Number(req.body?.minutes);
+  const minutes = Number.isFinite(rawMinutes)
+    ? Math.max(0, Math.min(24 * 60, Math.round(rawMinutes)))
+    : Math.max(0, Math.min(24 * 60, Math.round((ended - started) / 60000)));
+  if (minutes <= 0 && !req.body?.end_loc) return res.json({ ok: true, skipped: true });
+
+  const date = ended.toISOString().slice(0, 10);
+  const info = db.prepare(
+    `INSERT INTO reading_sessions
+       (user_id, book_id, date, started_at, ended_at, start_loc, end_loc, minutes, note)
+     VALUES (?,?,?,?,?,?,?,?,?)`
+  ).run(
+    req.user.id,
+    req.params.id,
+    date,
+    started.toISOString(),
+    ended.toISOString(),
+    req.body?.start_loc || null,
+    req.body?.end_loc || null,
+    minutes,
+    (req.body?.note || '').trim() || null,
+  );
+  if (req.body?.end_loc) {
+    db.prepare('UPDATE library SET last_loc = ? WHERE id = ? AND user_id = ?')
+      .run(req.body.end_loc, req.params.id, req.user.id);
+  }
+  res.json({ id: info.lastInsertRowid, minutes, date });
 });
 
 // ---- Bulk import -----------------------------------------------------------

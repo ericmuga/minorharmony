@@ -142,6 +142,21 @@ CREATE TABLE IF NOT EXISTS library (
   last_loc TEXT                                    -- last reading location (CFI from epub.js)
 );
 
+CREATE TABLE IF NOT EXISTS reading_sessions (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  book_id INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,                              -- YYYY-MM-DD
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ended_at TEXT,
+  start_loc TEXT,
+  end_loc TEXT,
+  minutes INTEGER NOT NULL DEFAULT 0,
+  note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_date ON reading_sessions(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_reading_sessions_book ON reading_sessions(book_id, date);
+
 -- ---- Recurring activities (gym, swimming, piano, hiking…) ----
 -- dow = comma list of weekdays, 0=Sun .. 6=Sat (e.g. "1,3,5"). Materialised onto the day grid.
 CREATE TABLE IF NOT EXISTS recurring_activities (

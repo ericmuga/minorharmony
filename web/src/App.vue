@@ -11,6 +11,8 @@ async function logout(){ await auth.logout(); router.push('/login'); }
             style="display:flex;align-items:baseline;gap:14px;padding:22px 4px 12px;border-bottom:1px solid var(--line)">
       <span class="serif brand" style="font-size:30px;font-weight:600">Serviam</span>
       <nav class="appnav">
+        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/dashboard">Dashboard</router-link>
+        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/calendar">Calendar</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/planner">Planner</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/today">Today</router-link>
         <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/goals">Goals</router-link>

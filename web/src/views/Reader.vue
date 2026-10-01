@@ -25,6 +25,9 @@ let rendition = null;
 let saveTimer = null;
 let chromeTimer = null;
 let ro = null;
+let sessionStartedAt = null;
+let sessionStartLoc = null;
+let currentLoc = null;
 
 async function init() {
   try {
@@ -37,6 +40,9 @@ async function init() {
 
     // The column stores the real filename, so the extension is the format.
     kind.value = /\.pdf$/i.test(meta.value.epub_path) ? 'pdf' : 'epub';
+    sessionStartedAt = new Date();
+    sessionStartLoc = meta.value.last_loc || null;
+    currentLoc = meta.value.last_loc || null;
     if (kind.value === 'pdf') return;      // PdfView takes it from here
 
     book = ePub(`/api/library/${bookId}/file`, { openAs: 'epub' });
@@ -47,6 +53,7 @@ async function init() {
     await rendition.display(meta.value.last_loc || undefined);
 
     rendition.on('relocated', (loc) => {
+      currentLoc = loc.start.cfi;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         api.patch(`/library/${bookId}`, { last_loc: loc.start.cfi }).catch(() => {});
@@ -88,10 +95,31 @@ function prev() { kind.value === 'pdf' ? pdfRef.value?.prev() : rendition?.prev(
 // PdfView reports the page it settled on; store it the same way as an EPUB CFI,
 // debounced, so flipping quickly doesn't write once per page.
 function onPdfLocated(loc) {
+  currentLoc = String(loc);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     api.patch(`/library/${bookId}`, { last_loc: loc }).catch(() => {});
   }, 600);
+}
+
+function recordReadingSession() {
+  if (!sessionStartedAt || !meta.value?.epub_path) return;
+  const ended = new Date();
+  const minutes = Math.max(0, Math.round((ended - sessionStartedAt) / 60000));
+  if (minutes <= 0 && currentLoc === sessionStartLoc) return;
+  fetch(`/api/library/${bookId}/reading-sessions`, {
+    method: 'POST',
+    credentials: 'include',
+    keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      started_at: sessionStartedAt.toISOString(),
+      ended_at: ended.toISOString(),
+      start_loc: sessionStartLoc,
+      end_loc: currentLoc,
+      minutes,
+    }),
+  }).catch(() => {});
 }
 
 // ---- immersive / full screen ----------------------------------------------
@@ -150,6 +178,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  recordReadingSession();
   window.removeEventListener('keydown', onKey);
   document.removeEventListener('fullscreenchange', onFsChange);
   clearTimeout(saveTimer);

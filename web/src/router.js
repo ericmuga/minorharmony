@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Planner from './views/Planner.vue';
+import Dashboard from './views/Dashboard.vue';
+import Calendar from './views/Calendar.vue';
 import Login from './views/Login.vue';
 import Today from './views/Today.vue';
 import Goals from './views/Goals.vue';
@@ -16,8 +18,10 @@ import Users from './views/Users.vue';
 export default createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/planner' },
+    { path: '/', redirect: '/dashboard' },
     { path: '/login', component: Login },
+    { path: '/dashboard', component: Dashboard },
+    { path: '/calendar', component: Calendar },
     { path: '/planner', component: Planner },
     { path: '/today', component: Today },
     { path: '/goals', component: Goals },
