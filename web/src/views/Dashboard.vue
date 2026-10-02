@@ -36,8 +36,9 @@ onMounted(load);
 
 <template>
   <div style="padding:24px 4px">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-      <div>
+    <div class="homehead">
+      <img class="saintbadge" src="/sj-josemaria-192.png" alt="St. Josemaria Escriva">
+      <div class="headcopy">
         <h2 class="serif" style="font-size:28px;margin:0">Dashboard</h2>
         <div class="muted small">A quick read on the life you are trying to order.</div>
       </div>
@@ -142,6 +143,9 @@ onMounted(load);
 
 <style scoped>
 .dashgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.homehead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.headcopy{flex:1;min-width:180px}
+.saintbadge{width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);box-shadow:0 2px 10px rgba(42,38,32,.18)}
 .statcard{background:#fbf7ec;border:1px solid var(--line-soft);border-radius:10px;padding:14px}
 .label{font-family:var(--serif);font-size:15px;color:var(--gold);font-style:italic}
 .big{font-family:var(--serif);font-size:34px;font-weight:600;color:var(--ox);line-height:1}
@@ -158,6 +162,7 @@ onMounted(load);
   .twocol{grid-template-columns:1fr;gap:0}
 }
 @media (max-width:430px){
+  .saintbadge{width:52px;height:52px}
   .dashgrid{grid-template-columns:1fr}
 }
 </style>
