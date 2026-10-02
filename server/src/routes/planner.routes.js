@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { db } from '../db.js';
 const r = Router();
 
+const LANES = ['primehub','farmerschoice','personal','prayer','wellbeing','formation'];
+
 // Aggregated day view: internal time blocks + external events + day type + holiday.
 // This is the single screen that means "nothing gets forgotten".
 r.get('/day', (req, res) => {
@@ -27,6 +29,31 @@ r.get('/day', (req, res) => {
     }
   });
   tx();
+
+  const norms = db.prepare(
+    `SELECT * FROM norms
+      WHERE user_id = ? AND cadence = 'daily' AND scheduled = 1 AND start_min IS NOT NULL`
+  ).all(req.user.id);
+  const matNorm = db.prepare(
+    `INSERT INTO time_blocks (user_id,date,start_min,end_min,title,lane,norm_id,done)
+     SELECT @u,@d,@s,@e,@t,@l,@n,
+            CASE WHEN EXISTS (
+              SELECT 1 FROM norm_log WHERE user_id=@u AND norm_id=@n AND date=@d
+            ) THEN 1 ELSE 0 END
+      WHERE NOT EXISTS (SELECT 1 FROM time_blocks WHERE user_id=@u AND date=@d AND norm_id=@n)`);
+  db.transaction(() => {
+    for (const n of norms) {
+      matNorm.run({
+        u: req.user.id,
+        d: date,
+        s: n.start_min,
+        e: n.start_min + (n.dur_min || 15),
+        t: n.name,
+        l: LANES.includes(n.lane) ? n.lane : 'prayer',
+        n: n.id,
+      });
+    }
+  })();
 
   const blocks = db.prepare(
     `SELECT * FROM time_blocks
@@ -66,6 +93,19 @@ r.patch('/blocks/:id', (req, res) => {
   if (!sets.length) return res.json({ ok: true });
   vals.push(req.params.id, req.user.id);
   db.prepare(`UPDATE time_blocks SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`).run(...vals);
+  if ('done' in (req.body || {})) {
+    const row = db.prepare('SELECT norm_id, date FROM time_blocks WHERE id = ? AND user_id = ?')
+      .get(req.params.id, req.user.id);
+    if (row?.norm_id) {
+      if (req.body.done) {
+        db.prepare(`INSERT OR IGNORE INTO norm_log (user_id, norm_id, date) VALUES (?,?,?)`)
+          .run(req.user.id, row.norm_id, row.date);
+      } else {
+        db.prepare(`DELETE FROM norm_log WHERE user_id = ? AND norm_id = ? AND date = ?`)
+          .run(req.user.id, row.norm_id, row.date);
+      }
+    }
+  }
   res.json({ ok: true });
 });
 
@@ -74,11 +114,11 @@ r.delete('/blocks/:id', (req, res) => {
   // GET /day re-inserts any activity that has no row for the date, so a hard delete
   // comes straight back on the next load and the × looks broken. Hand-made blocks
   // (activity_id IS NULL) are nothing to re-create, so those really are deleted.
-  const row = db.prepare('SELECT activity_id FROM time_blocks WHERE id = ? AND user_id = ?')
+  const row = db.prepare('SELECT activity_id, norm_id FROM time_blocks WHERE id = ? AND user_id = ?')
     .get(req.params.id, req.user.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
 
-  if (row.activity_id == null) {
+  if (row.activity_id == null && row.norm_id == null) {
     db.prepare('DELETE FROM time_blocks WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
   } else {
     db.prepare('UPDATE time_blocks SET dismissed = 1 WHERE id = ? AND user_id = ?')
@@ -91,8 +131,6 @@ r.delete('/blocks/:id', (req, res) => {
 // The fixed points of the day. Deliberately not auto-materialised the way
 // recurring_activities are: you tap to place them, so a day you never planned
 // doesn't fill up with norms you didn't actually keep.
-
-const LANES = ['primehub','farmerschoice','personal','prayer','wellbeing','formation'];
 
 // What a Christian working day is usually pegged to. Offered as a starting
 // point rather than seeded, so an existing install can take them or not.

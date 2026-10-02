@@ -20,6 +20,9 @@ const immersive = ref(false);
 const chromeVisible = ref(true);       // in immersive mode the bars auto-hide
 const kind = ref(null);                // 'epub' | 'pdf', from the stored filename
 const pdfRef = ref(null);
+const bookmarks = ref([]);
+const showBookmarks = ref(false);
+const bookmarkMsg = ref('');
 let book = null;
 let rendition = null;
 let saveTimer = null;
@@ -43,6 +46,7 @@ async function init() {
     sessionStartedAt = new Date();
     sessionStartLoc = meta.value.last_loc || null;
     currentLoc = meta.value.last_loc || null;
+    loadBookmarks();
     if (kind.value === 'pdf') return;      // PdfView takes it from here
 
     book = ePub(`/api/library/${bookId}/file`, { openAs: 'epub' });
@@ -100,6 +104,39 @@ function onPdfLocated(loc) {
   saveTimer = setTimeout(() => {
     api.patch(`/library/${bookId}`, { last_loc: loc }).catch(() => {});
   }, 600);
+}
+
+async function loadBookmarks() {
+  bookmarks.value = await api.get(`/library/${bookId}/bookmarks`).catch(() => []);
+}
+
+async function addBookmark() {
+  const loc = currentLoc || meta.value?.last_loc;
+  if (!loc) {
+    bookmarkMsg.value = 'Open a page first.';
+    setTimeout(() => { bookmarkMsg.value = ''; }, 2500);
+    return;
+  }
+  const label = kind.value === 'pdf'
+    ? `Page ${loc}`
+    : new Date().toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  await api.post(`/library/${bookId}/bookmarks`, { loc: String(loc), label });
+  bookmarkMsg.value = 'Bookmark saved.';
+  setTimeout(() => { bookmarkMsg.value = ''; }, 2500);
+  await loadBookmarks();
+}
+
+async function goBookmark(b) {
+  currentLoc = b.loc;
+  if (kind.value === 'pdf') pdfRef.value?.goTo(b.loc);
+  else await rendition?.display(b.loc);
+  showBookmarks.value = false;
+  nudgeChrome();
+}
+
+async function deleteBookmark(b) {
+  await api.del(`/library/${bookId}/bookmarks/${b.id}`);
+  bookmarks.value = bookmarks.value.filter(x => x.id !== b.id);
 }
 
 function recordReadingSession() {
@@ -196,10 +233,23 @@ onBeforeUnmount(() => {
       <button class="btn ghost small" @click="leave">{{ immersive ? '✕ Exit' : '← Library' }}</button>
       <h3 class="serif title" v-if="meta">{{ meta.title }}</h3>
       <span v-if="meta?.author" class="muted small author">{{ meta.author }}</span>
+      <button class="btn ghost small" @click="addBookmark" title="Save bookmark">Bookmark</button>
+      <button class="btn ghost small" @click="showBookmarks = !showBookmarks" title="Show bookmarks">
+        Marks {{ bookmarks.length || '' }}
+      </button>
       <button class="btn ghost small" @click="toggleImmersive"
               :title="immersive ? 'Exit full screen (Esc)' : 'Full screen (F)'">
         {{ immersive ? '⤡' : '⤢' }}
       </button>
+    </div>
+    <div v-if="bookmarkMsg" class="muted small bookmsg">{{ bookmarkMsg }}</div>
+    <div v-if="showBookmarks" class="marks">
+      <div v-if="!bookmarks.length" class="muted small">No bookmarks yet.</div>
+      <div v-for="b in bookmarks" :key="b.id" class="markrow">
+        <button class="marklink" @click="goBookmark(b)">{{ b.label || b.loc }}</button>
+        <span class="muted small">{{ new Date(b.created_at + 'Z').toLocaleDateString() }}</span>
+        <button class="delx" @click="deleteBookmark(b)">x</button>
+      </div>
     </div>
 
     <p v-if="err" class="err">{{ err }}</p>
@@ -248,9 +298,30 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #f4eee0;
+}
 .bar.top { margin-bottom: 10px; }
 .bar.bottom { gap: 8px; justify-content: center; margin-top: 12px; }
+.bookmsg { position: relative; z-index: 5; text-align: right; }
+.marks {
+  position: relative;
+  z-index: 6;
+  background: #fbf7ec;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: -2px 0 10px;
+}
+.markrow { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line-soft); padding: 7px 0; }
+.markrow:first-child { border-top: 0; }
+.marklink { flex: 1; text-align: left; border: 0; background: transparent; color: var(--ox); padding: 0; font-size: 15px; }
 .title { margin: 0; flex: 1; font-size: 20px; }
 .author { white-space: nowrap; }
 .err { color: var(--ox); }

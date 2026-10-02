@@ -11,6 +11,7 @@ const bricks = ref([]);
 const examen = ref({ date: today, gratitude: '', struggle: '', resolution: '' });
 const newBrick = ref('');
 const savedMsg = ref('');
+const laneOptions = ['prayer', 'personal', 'formation', 'wellbeing', 'primehub', 'farmerschoice'];
 
 const dailyNorms = computed(() => norms.value.filter(n => n.cadence === 'daily'));
 const rhythmNorms = computed(() => norms.value.filter(n => n.cadence !== 'daily'));
@@ -37,6 +38,43 @@ const planStreak = computed(() => {
 
 const prettyDate = computed(() =>
   new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
+
+function hh(min) {
+  if (min == null) return '';
+  return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
+}
+
+function editSchedule(n) {
+  const start = n.start_min ?? 9 * 60;
+  n.schedH = Math.floor(start / 60);
+  n.schedM = [0, 15, 30, 45].reduce((best, m) =>
+    Math.abs(m - start % 60) < Math.abs(best - start % 60) ? m : best, 0);
+  n.schedDur = n.dur_min || 15;
+  n.schedLane = n.lane || 'prayer';
+  n.editSchedule = true;
+}
+
+async function saveSchedule(n) {
+  const start = n.schedH * 60 + Number(n.schedM);
+  await api.patch(`/norms/${n.id}`, {
+    scheduled: 1,
+    start_min: start,
+    dur_min: Number(n.schedDur) || 15,
+    lane: n.schedLane || 'prayer',
+  });
+  Object.assign(n, {
+    scheduled: 1,
+    start_min: start,
+    dur_min: Number(n.schedDur) || 15,
+    lane: n.schedLane || 'prayer',
+    editSchedule: false,
+  });
+}
+
+async function clearSchedule(n) {
+  await api.patch(`/norms/${n.id}`, { scheduled: 0, start_min: null });
+  Object.assign(n, { scheduled: 0, start_min: null, editSchedule: false });
+}
 
 async function load() {
   const [n, log, hist, br, ex] = await Promise.all([
@@ -120,6 +158,38 @@ onMounted(load);
         <div class="rowtext">
           <span class="main">{{ n.name }}</span>
           <div class="sub" v-if="n.sub">{{ n.sub }}</div>
+          <div class="schedline">
+            <button class="btn ghost small" @click="editSchedule(n)">
+              {{ n.scheduled ? `Default ${hh(n.start_min)}` : 'Set default time' }}
+            </button>
+            <span v-if="n.scheduled && !n.editSchedule" class="muted small">
+              {{ n.dur_min || 15 }} min · {{ n.lane || 'prayer' }}
+            </span>
+          </div>
+          <div v-if="n.editSchedule" class="schedulebar">
+            <select class="field" v-model.number="n.schedH">
+              <option v-for="h in 24" :key="h-1" :value="h-1">{{ String(h-1).padStart(2,'0') }}:00</option>
+            </select>
+            <select class="field" v-model.number="n.schedM">
+              <option :value="0">:00</option>
+              <option :value="15">:15</option>
+              <option :value="30">:30</option>
+              <option :value="45">:45</option>
+            </select>
+            <select class="field" v-model.number="n.schedDur">
+              <option :value="5">5 min</option>
+              <option :value="10">10 min</option>
+              <option :value="15">15 min</option>
+              <option :value="30">30 min</option>
+              <option :value="45">45 min</option>
+              <option :value="60">1 h</option>
+            </select>
+            <select class="field" v-model="n.schedLane">
+              <option v-for="l in laneOptions" :key="l" :value="l">{{ l }}</option>
+            </select>
+            <button class="btn small" @click="saveSchedule(n)">Save</button>
+            <button v-if="n.scheduled" class="btn ghost small" @click="clearSchedule(n)">Remove</button>
+          </div>
         </div>
       </div>
 
@@ -181,3 +251,27 @@ onMounted(load);
     </div>
   </div>
 </template>
+
+<style scoped>
+.schedline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+.schedulebar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 7px;
+}
+.schedulebar .field {
+  width: auto;
+  min-width: 76px;
+}
+@media (max-width: 430px) {
+  .schedulebar .field { flex: 1 1 45%; }
+}
+</style>

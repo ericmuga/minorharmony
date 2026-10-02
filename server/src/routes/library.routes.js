@@ -195,6 +195,30 @@ r.post('/:id/reading-sessions', requireOwnedBook, (req, res) => {
   res.json({ id: info.lastInsertRowid, minutes, date });
 });
 
+r.get('/:id/bookmarks', requireOwnedBook, (req, res) => {
+  res.json(db.prepare(
+    `SELECT id, loc, label, created_at FROM reading_bookmarks
+      WHERE user_id = ? AND book_id = ? ORDER BY created_at DESC, id DESC`
+  ).all(req.user.id, req.params.id));
+});
+
+r.post('/:id/bookmarks', requireOwnedBook, (req, res) => {
+  const loc = String(req.body?.loc || '').trim();
+  if (!loc) return res.status(400).json({ error: 'loc_required' });
+  const label = String(req.body?.label || '').trim().slice(0, 120) || null;
+  const info = db.prepare(
+    `INSERT INTO reading_bookmarks (user_id, book_id, loc, label) VALUES (?,?,?,?)`
+  ).run(req.user.id, req.params.id, loc, label);
+  res.json({ id: info.lastInsertRowid });
+});
+
+r.delete('/:id/bookmarks/:bookmarkId', requireOwnedBook, (req, res) => {
+  db.prepare(
+    `DELETE FROM reading_bookmarks WHERE id = ? AND book_id = ? AND user_id = ?`
+  ).run(req.params.bookmarkId, req.params.id, req.user.id);
+  res.json({ ok: true });
+});
+
 // ---- Bulk import -----------------------------------------------------------
 // Two phases on purpose. Phase 1 uploads the files and returns a *proposal*;
 // phase 2 commits the user's decisions. The files are uploaded once and held in

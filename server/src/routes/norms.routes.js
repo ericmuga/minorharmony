@@ -14,7 +14,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 r.get('/', (req, res) =>
   res.json(db.prepare(
-    `SELECT id, name, sub, cadence, sort FROM norms
+    `SELECT id, name, sub, cadence, sort, scheduled, start_min, dur_min, lane FROM norms
       WHERE user_id = ?
       ORDER BY CASE cadence WHEN 'daily' THEN 0 WHEN 'weekly' THEN 1 WHEN 'monthly' THEN 2 ELSE 3 END, sort, id`
   ).all(req.user.id)));
@@ -37,9 +37,14 @@ r.post('/', (req, res) => {
 });
 
 r.patch('/:id', (req, res) => {
-  const f = ['name', 'sub', 'cadence', 'sort'];
+  const f = ['name', 'sub', 'cadence', 'sort', 'scheduled', 'start_min', 'dur_min', 'lane'];
   const sets = [], vals = [];
-  for (const k of f) if (k in (req.body || {})) { sets.push(`${k} = ?`); vals.push(req.body[k]); }
+  for (const k of f) if (k in (req.body || {})) {
+    sets.push(`${k} = ?`);
+    if (k === 'scheduled') vals.push(req.body[k] ? 1 : 0);
+    else if (['start_min', 'dur_min', 'sort'].includes(k)) vals.push(req.body[k] == null ? null : Number(req.body[k]));
+    else vals.push(req.body[k]);
+  }
   if (sets.length) {
     vals.push(req.params.id, req.user.id);
     db.prepare(`UPDATE norms SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`).run(...vals);
@@ -61,9 +66,13 @@ r.post('/:id/log', (req, res) => {
   if (exists) {
     db.prepare('DELETE FROM norm_log WHERE user_id = ? AND norm_id = ? AND date = ?')
       .run(req.user.id, req.params.id, date);
+    db.prepare('UPDATE time_blocks SET done = 0 WHERE user_id = ? AND norm_id = ? AND date = ?')
+      .run(req.user.id, req.params.id, date);
     res.json({ done: false });
   } else {
     db.prepare('INSERT INTO norm_log (user_id, norm_id, date) VALUES (?,?,?)')
+      .run(req.user.id, req.params.id, date);
+    db.prepare('UPDATE time_blocks SET done = 1 WHERE user_id = ? AND norm_id = ? AND date = ?')
       .run(req.user.id, req.params.id, date);
     res.json({ done: true });
   }

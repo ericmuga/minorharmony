@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS time_blocks (
   prayer_tag TEXT,                               -- e.g. "for patience" / a mortification
   brick_id INTEGER REFERENCES bricks(id) ON DELETE SET NULL,
   activity_id INTEGER REFERENCES recurring_activities(id) ON DELETE SET NULL,
+  norm_id INTEGER REFERENCES norms(id) ON DELETE SET NULL,
   done INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -113,7 +114,11 @@ CREATE TABLE IF NOT EXISTS bricks (
 CREATE TABLE IF NOT EXISTS norms (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL, sub TEXT, cadence TEXT NOT NULL DEFAULT 'daily', sort INTEGER DEFAULT 0
+  name TEXT NOT NULL, sub TEXT, cadence TEXT NOT NULL DEFAULT 'daily', sort INTEGER DEFAULT 0,
+  scheduled INTEGER NOT NULL DEFAULT 0,
+  start_min INTEGER,
+  dur_min INTEGER NOT NULL DEFAULT 15,
+  lane TEXT NOT NULL DEFAULT 'prayer'
 );
 CREATE TABLE IF NOT EXISTS norm_log (
   user_id INTEGER NOT NULL, norm_id INTEGER NOT NULL, date TEXT NOT NULL,
@@ -156,6 +161,16 @@ CREATE TABLE IF NOT EXISTS reading_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_reading_sessions_user_date ON reading_sessions(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_reading_sessions_book ON reading_sessions(book_id, date);
+
+CREATE TABLE IF NOT EXISTS reading_bookmarks (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  book_id INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+  loc TEXT NOT NULL,
+  label TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_reading_bookmarks_book ON reading_bookmarks(book_id, created_at);
 
 -- ---- Recurring activities (gym, swimming, piano, hiking…) ----
 -- dow = comma list of weekdays, 0=Sun .. 6=Sat (e.g. "1,3,5"). Materialised onto the day grid.

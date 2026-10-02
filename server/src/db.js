@@ -30,5 +30,10 @@ ensureColumn('library', 'last_loc', 'TEXT');
 // reappears. Instead we tombstone it — the row stays (so materialisation still
 // sees it and skips) but the day view filters it out. "Skip the gym today."
 ensureColumn('time_blocks', 'dismissed', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('time_blocks', 'norm_id', 'INTEGER REFERENCES norms(id) ON DELETE SET NULL');
+ensureColumn('norms', 'scheduled', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('norms', 'start_min', 'INTEGER');
+ensureColumn('norms', 'dur_min', 'INTEGER NOT NULL DEFAULT 15');
+ensureColumn('norms', 'lane', "TEXT NOT NULL DEFAULT 'prayer'");
 
 export default db;

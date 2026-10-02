@@ -10,6 +10,10 @@ const date = ref(new Date().toISOString().slice(0,10));
 const day = ref({ blocks: [], events: [], day_type: 'workday', holiday: null });
 const capture = ref([]);
 const newCapture = ref('');
+const synthesis = ref(null);
+const synthBusy = ref(false);
+const synthMsg = ref('');
+const domains = ref([]);
 const showAdd = ref(false);
 const form = ref(blank());
 
@@ -117,6 +121,70 @@ async function addCapture(){ const t=newCapture.value.trim(); if(!t) return;
   await api.post('/capture', { text:t }); newCapture.value=''; capture.value = await api.get('/capture'); }
 async function syncCals(){ await api.post('/calendars/sync'); await load(); }
 
+function domainName(id) {
+  return domains.value.find(d => d.id === id)?.name || 'Goal';
+}
+
+async function synthesizeCapture() {
+  synthBusy.value = true;
+  synthMsg.value = '';
+  synthesis.value = null;
+  try {
+    const [proposal, ds] = await Promise.all([
+      api.post('/capture/synthesize', { date: date.value, ids: capture.value.map(c => c.id) }),
+      api.get('/goals'),
+    ]);
+    synthesis.value = {
+      tasks: (proposal.tasks || []).map(t => ({ ...t, added: false })),
+      goals: (proposal.goals || []).map(g => ({ ...g, added: false })),
+      notes: proposal.notes || [],
+    };
+    domains.value = ds;
+    if (!synthesis.value.tasks.length && !synthesis.value.goals.length)
+      synthMsg.value = 'Claude did not find anything concrete to schedule or add as a goal.';
+  } catch (e) {
+    synthMsg.value = e.message === 'nothing_to_synthesize'
+      ? 'Capture something first.'
+      : 'Could not synthesize this inbox: ' + e.message;
+  } finally {
+    synthBusy.value = false;
+  }
+}
+
+async function addSynthTask(t) {
+  await api.post('/planner/blocks', {
+    date: date.value,
+    title: t.title,
+    start_min: t.start_min,
+    end_min: t.end_min,
+    lane: t.lane,
+    offering: t.offering,
+    prayer_tag: t.prayer_tag,
+  });
+  t.added = true;
+  await load();
+}
+
+async function addSynthGoal(g) {
+  await api.post(`/goals/domains/${g.domain_id}/goals`, {
+    title: g.title,
+    why: g.why,
+    horizon: g.horizon,
+  });
+  g.added = true;
+}
+
+async function clearSynthSources() {
+  const ids = new Set([
+    ...((synthesis.value?.tasks || []).flatMap(t => t.source_capture_ids || [])),
+    ...((synthesis.value?.goals || []).flatMap(g => g.source_capture_ids || [])),
+  ]);
+  const chosen = ids.size ? [...ids] : capture.value.map(c => c.id);
+  await Promise.all(chosen.map(id => api.post(`/capture/${id}/process`, {})));
+  synthesis.value = null;
+  capture.value = await api.get('/capture');
+}
+
 watch(date, load);
 onMounted(() => { load(); loadPresets(); });
 </script>
@@ -149,6 +217,51 @@ onMounted(() => { load(); loadPresets(); });
     </div>
     <div v-if="capture.length" class="small muted" style="margin-bottom:6px">
       Inbox: <span v-for="c in capture" :key="c.id" style="margin-right:10px">• {{ c.text }}</span>
+      <button class="btn ghost small" :disabled="synthBusy" style="margin-left:4px" @click="synthesizeCapture">
+        {{ synthBusy ? 'Thinking...' : 'Plan inbox' }}
+      </button>
+    </div>
+    <p v-if="synthMsg" class="small" style="color:var(--ox);margin:.3em 0">{{ synthMsg }}</p>
+
+    <div v-if="synthesis" class="synthbox">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div>
+          <div class="sectlabel" style="margin:0">Claude plan from brain dump</div>
+          <p class="muted small" style="margin:.2em 0 0">Review first, then add only what belongs in the day.</p>
+        </div>
+        <button class="btn ghost small" @click="clearSynthSources">Mark source items processed</button>
+      </div>
+
+      <div v-if="synthesis.tasks.length" class="sectlabel">Suggested time blocks</div>
+      <div v-for="t in synthesis.tasks" :key="`${t.title}-${t.start_min}`" class="proposal">
+        <div class="pbody">
+          <strong>{{ t.title }}</strong>
+          <div class="muted small">
+            {{ hh(t.start_min) }}-{{ hh(t.end_min) }} · {{ t.lane }}
+            <span v-if="t.offering"> · {{ t.offering }}</span>
+          </div>
+        </div>
+        <button class="btn small" :disabled="t.added" @click="addSynthTask(t)">
+          {{ t.added ? 'Added' : 'Add block' }}
+        </button>
+      </div>
+
+      <div v-if="synthesis.goals.length" class="sectlabel">Suggested goals</div>
+      <div v-for="g in synthesis.goals" :key="`${g.title}-${g.domain_id}`" class="proposal">
+        <div class="pbody">
+          <strong>{{ g.title }}</strong>
+          <div class="muted small">
+            {{ domainName(g.domain_id) }} · {{ g.horizon }}
+            <span v-if="g.why"> · {{ g.why }}</span>
+          </div>
+        </div>
+        <button class="btn small" :disabled="g.added" @click="addSynthGoal(g)">
+          {{ g.added ? 'Added' : 'Add goal' }}
+        </button>
+      </div>
+
+      <div v-if="synthesis.notes.length" class="sectlabel">Notes</div>
+      <p v-for="n in synthesis.notes" :key="n" class="muted small" style="margin:.25em 0">{{ n }}</p>
     </div>
 
     <!-- One-tap blocks: the fixed points of the day, placed on demand. -->
@@ -297,6 +410,23 @@ onMounted(() => { load(); loadPresets(); });
 
 <style scoped>
 .feedcap { display: none; }
+.synthbox {
+  background: #fbf7ec;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  padding: 14px;
+  margin: 10px 0 14px;
+}
+.proposal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line-soft);
+  padding: 9px 0;
+}
+.proposal:first-of-type { border-top: 0; }
+.pbody { flex: 1; min-width: 0; }
 
 /* The one-tap strip scrolls rather than wrapping: on a phone a dozen chips
    would otherwise push the whole grid down the page. */
@@ -325,6 +455,8 @@ onMounted(() => { load(); loadPresets(); });
    one word per line. Below this width the two timelines stack instead, each
    full width, with a caption so the second one is obviously the calendar. */
 @media (max-width: 700px) {
+  .proposal { align-items: flex-start; flex-wrap: wrap; }
+  .proposal .btn { margin-left: auto; }
   .daygrid { flex-wrap: wrap; }
   .feeds {
     width: 100% !important;
