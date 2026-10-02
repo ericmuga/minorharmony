@@ -6,8 +6,12 @@ const email = ref(''); const password = ref(''); const err = ref(''); const busy
 const router = useRouter();
 async function submit(){
   err.value=''; busy.value=true;
-  try { await auth.login(email.value, password.value); router.push('/planner'); }
-  catch(e){ err.value = e.message==='invalid_credentials' ? 'Wrong email or password.' : 'Could not sign in.'; }
+  try { await auth.login(email.value, password.value); router.push('/dashboard'); }
+  catch(e){
+    err.value = e.message === 'invalid_credentials' ? 'Wrong email or password.'
+      : e.message === 'Too Many Requests' ? 'Too many attempts. Wait a few minutes and try again.'
+      : 'Could not sign in.';
+  }
   finally { busy.value=false; }
 }
 </script>
