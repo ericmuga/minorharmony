@@ -53,21 +53,80 @@ input,select,textarea{font-family:var(--body)}
 html, body { overflow-x: hidden; }
 .rowtext .main, .rowtext .sub { overflow-wrap: anywhere; }
 
-/* The nav is a horizontal strip that scrolls rather than wrapping into three
-   ragged lines. Momentum scrolling, and the scrollbar hidden so it reads as a
-   strip of links, not a widget. */
+.appheader {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 22px 4px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.mobiletop { display: contents; }
+.brand { font-size: 30px; font-weight: 600; }
+.menutoggle { display: none; }
 .appnav {
   display: flex; gap: 6px; flex: 1;
   overflow-x: auto; -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 .appnav::-webkit-scrollbar { display: none; }
-.appnav > a { white-space: nowrap; }
+.navlink {
+  font-size: 17px;
+  text-decoration: none;
+  color: var(--ink-soft);
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+.headeractions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
 @media (max-width: 760px) {
   .appshell { padding: 0 10px 96px; }
-  .appheader { padding: 14px 2px 10px; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .appheader .brand { font-size: 24px; }
+  .appheader {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: block;
+    padding: 10px 2px 8px;
+    background: rgba(244,238,224,.96);
+    backdrop-filter: blur(8px);
+  }
+  .mobiletop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .appheader .brand { font-size: 26px; }
+  .menutoggle { display: inline-flex; align-items: center; min-height: 40px; }
+  .appnav, .headeractions {
+    display: none;
+  }
+  .appnav.open {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    overflow: visible;
+    padding: 10px 0 8px;
+  }
+  .headeractions.open {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 0 6px;
+  }
+  .navlink {
+    display: block;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-soft);
+    border-radius: 9px;
+    background: #fbf7ec;
+    font-size: 17px;
+  }
+  .headeractions .btn { flex: 1 1 auto; }
 
   .card { padding: 13px; border-radius: 12px; margin-bottom: 12px; }
   .card h2 { font-size: 20px; }

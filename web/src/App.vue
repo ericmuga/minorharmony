@@ -5,11 +5,16 @@ import { useRouter } from 'vue-router';
 import { api } from './api.js';
 
 const router = useRouter();
+const menuOpen = ref(false);
 const remindersOn = ref(localStorage.getItem('serviam_reminders') === '1');
 let reminderTimer = null;
 const sent = new Set();
 
-async function logout(){ await auth.logout(); router.push('/login'); }
+function closeMenu() {
+  menuOpen.value = false;
+}
+
+async function logout(){ await auth.logout(); closeMenu(); router.push('/login'); }
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -69,6 +74,7 @@ async function checkReminders() {
 }
 
 onMounted(() => {
+  router.afterEach(closeMenu);
   reminderTimer = setInterval(checkReminders, 60000);
   setTimeout(checkReminders, 2500);
 });
@@ -77,28 +83,34 @@ onBeforeUnmount(() => clearInterval(reminderTimer));
 
 <template>
   <div class="appshell" style="max-width:920px;margin:0 auto;padding:0 16px 120px">
-    <header v-if="auth.user" class="appheader"
-            style="display:flex;align-items:baseline;gap:14px;padding:22px 4px 12px;border-bottom:1px solid var(--line)">
-      <span class="serif brand" style="font-size:30px;font-weight:600">Serviam</span>
-      <nav class="appnav">
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/dashboard">Dashboard</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/calendar">Calendar</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/planner">Planner</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/today">Today</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/goals">Goals</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/struggle">Struggle</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/people">People</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/reading">Reading</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/counsel">Counsel</router-link>
-        <router-link class="serif" style="font-size:17px;text-decoration:none;color:var(--ink-soft);padding:4px 10px" to="/briefing">Briefing</router-link>
+    <header v-if="auth.user" class="appheader">
+      <div class="mobiletop">
+        <span class="serif brand">Serviam</span>
+        <button class="btn ghost small menutoggle" type="button" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
+          {{ menuOpen ? 'Close' : 'Menu' }}
+        </button>
+      </div>
+      <nav class="appnav" :class="{ open: menuOpen }">
+        <router-link class="serif navlink" to="/dashboard">Dashboard</router-link>
+        <router-link class="serif navlink" to="/calendar">Calendar</router-link>
+        <router-link class="serif navlink" to="/planner">Planner</router-link>
+        <router-link class="serif navlink" to="/today">Today</router-link>
+        <router-link class="serif navlink" to="/goals">Goals</router-link>
+        <router-link class="serif navlink" to="/struggle">Struggle</router-link>
+        <router-link class="serif navlink" to="/people">People</router-link>
+        <router-link class="serif navlink" to="/reading">Reading</router-link>
+        <router-link class="serif navlink" to="/counsel">Counsel</router-link>
+        <router-link class="serif navlink" to="/briefing">Briefing</router-link>
       </nav>
-      <!-- Kept out of the main nav: it's administration, not a daily tab. -->
-      <router-link v-if="auth.user?.role === 'owner'" class="btn ghost small"
-                   style="text-decoration:none" to="/logins">Logins</router-link>
-      <button class="btn ghost small" @click="toggleReminders">
-        {{ remindersOn ? 'Reminders on' : 'Reminders' }}
-      </button>
-      <button class="btn ghost small" @click="logout">Sign out</button>
+      <div class="headeractions" :class="{ open: menuOpen }">
+        <!-- Kept out of the main nav: it's administration, not a daily tab. -->
+        <router-link v-if="auth.user?.role === 'owner'" class="btn ghost small"
+                     style="text-decoration:none" to="/logins">Logins</router-link>
+        <button class="btn ghost small" @click="toggleReminders">
+          {{ remindersOn ? 'Reminders on' : 'Reminders' }}
+        </button>
+        <button class="btn ghost small" @click="logout">Sign out</button>
+      </div>
     </header>
     <router-view />
   </div>
