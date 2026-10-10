@@ -3,8 +3,10 @@ import { fetchIcalEvents } from '../lib/ical.js';
 
 // Pull every enabled calendar and cache its events. Provider-abstracted:
 // today only 'ical' is implemented; 'google' / 'graph' can be added here later.
-export async function syncAllCalendars() {
-  const cals = db.prepare('SELECT * FROM external_calendars WHERE enabled = 1').all();
+export async function syncAllCalendars({ id } = {}) {
+  const cals = id
+    ? db.prepare('SELECT * FROM external_calendars WHERE id = ?').all(id)
+    : db.prepare('SELECT * FROM external_calendars WHERE enabled = 1').all();
   const replace = db.prepare(
     `INSERT INTO external_events (calendar_id, uid, title, start_utc, end_utc, all_day, location)
      VALUES (@calendar_id,@uid,@title,@start_utc,@end_utc,@all_day,@location)
@@ -16,7 +18,10 @@ export async function syncAllCalendars() {
   const results = [];
   for (const c of cals) {
     try {
-      if (c.provider !== 'ical' || !c.ics_url) { results.push({ id: c.id, skipped: true }); continue; }
+      if (c.provider !== 'ical' || !c.ics_url) {
+        results.push({ id: c.id, label: c.label, skipped: c.provider !== 'ical' ? `provider '${c.provider}' not implemented` : 'no ics_url' });
+        continue;
+      }
       const events = await fetchIcalEvents(c.ics_url);
       const tx = db.transaction((rows) => {
         wipe.run(c.id);

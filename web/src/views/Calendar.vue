@@ -6,6 +6,7 @@ const date = ref(new Date().toISOString().slice(0, 10));
 const day = ref({ blocks: [], events: [], day_type: 'workday', holiday: null });
 const calendars = ref([]);
 const syncing = ref(false);
+const refreshing = ref(null);
 const msg = ref('');
 const form = ref({ label: '', lane: 'personal', provider: 'ical', ics_url: '', color: '#3a6ea5' });
 
@@ -79,18 +80,39 @@ async function removeCalendar(c) {
   await loadCalendars();
   await loadDay();
 }
+function describe(results) {
+  if (!results.length) return 'No enabled feeds to sync.';
+  return results.map(r => {
+    const name = r.label || `#${r.id}`;
+    if (r.error) return `${name}: error - ${r.error}`;
+    if (r.skipped) return `${name}: skipped (${r.skipped})`;
+    return `${name}: ${r.count} events`;
+  }).join(' · ');
+}
 async function sync() {
   syncing.value = true;
   msg.value = '';
   try {
     const out = await api.post('/calendars/sync', {});
-    const count = out.results.reduce((sum, r) => sum + (r.count || 0), 0);
-    msg.value = `Synced ${count} events.`;
+    msg.value = describe(out.results);
     await Promise.all([loadCalendars(), loadDay()]);
   } catch (e) {
     msg.value = 'Sync failed: ' + e.message;
   } finally {
     syncing.value = false;
+  }
+}
+async function refreshCalendar(c) {
+  refreshing.value = c.id;
+  msg.value = '';
+  try {
+    const out = await api.post(`/calendars/${c.id}/sync`, {});
+    msg.value = describe(out.results);
+    await Promise.all([loadCalendars(), loadDay()]);
+  } catch (e) {
+    msg.value = `Refresh of "${c.label}" failed: ` + e.message;
+  } finally {
+    refreshing.value = null;
   }
 }
 
@@ -148,6 +170,9 @@ onMounted(() => Promise.all([loadDay(), loadCalendars()]));
               {{ c.last_synced_at ? `last synced ${c.last_synced_at}` : 'not synced yet' }}
             </div>
           </div>
+          <button class="btn ghost small" :disabled="refreshing === c.id || syncing" @click="refreshCalendar(c)">
+            {{ refreshing === c.id ? 'Refreshing...' : 'Refresh' }}
+          </button>
           <button class="delx" @click="removeCalendar(c)">x</button>
         </div>
 

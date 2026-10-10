@@ -28,4 +28,12 @@ r.post('/sync', async (req, res) => {
   res.json({ results });
 });
 
+// Refresh a single feed.
+r.post('/:id/sync', async (req, res) => {
+  const cal = db.prepare('SELECT id FROM external_calendars WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!cal) return res.status(404).json({ error: 'not_found' });
+  const results = await syncAllCalendars({ id: cal.id });
+  res.json({ results });
+});
+
 export default r;
