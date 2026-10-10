@@ -39,6 +39,8 @@ const planStreak = computed(() => {
 const prettyDate = computed(() =>
   new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
 
+const minuteSteps = Array.from({ length: 12 }, (_, i) => i * 5);
+
 function hh(min) {
   if (min == null) return '';
   return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0');
@@ -47,8 +49,7 @@ function hh(min) {
 function editSchedule(n) {
   const start = n.start_min ?? 9 * 60;
   n.schedH = Math.floor(start / 60);
-  n.schedM = [0, 15, 30, 45].reduce((best, m) =>
-    Math.abs(m - start % 60) < Math.abs(best - start % 60) ? m : best, 0);
+  n.schedM = Math.min(55, Math.round((start % 60) / 5) * 5);
   n.schedDur = n.dur_min || 15;
   n.schedLane = n.lane || 'prayer';
   n.editSchedule = true;
@@ -171,10 +172,7 @@ onMounted(load);
               <option v-for="h in 24" :key="h-1" :value="h-1">{{ String(h-1).padStart(2,'0') }}:00</option>
             </select>
             <select class="field" v-model.number="n.schedM">
-              <option :value="0">:00</option>
-              <option :value="15">:15</option>
-              <option :value="30">:30</option>
-              <option :value="45">:45</option>
+              <option v-for="m in minuteSteps" :key="m" :value="m">:{{ String(m).padStart(2,'0') }}</option>
             </select>
             <select class="field" v-model.number="n.schedDur">
               <option :value="5">5 min</option>

@@ -4,6 +4,8 @@ import { api } from '../api.js';
 import TimeBlock from '../components/TimeBlock.vue';
 
 const START_HOUR = 5, END_HOUR = 23, HOUR_PX = 58;
+// Activities can be as short as 5 minutes, so starts move in 5-minute steps.
+const minuteSteps = Array.from({ length: 12 }, (_, i) => i * 5);
 const hours = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i);
 
 const date = ref(new Date().toISOString().slice(0,10));
@@ -87,17 +89,22 @@ function startEdit(b){
   form.value = {
     title: b.title || '',
     startH: Math.floor(b.start_min / 60),
-    // The grid's dropdown only offers quarter hours; snap so an odd start time
+    // The dropdown offers 5-minute steps; snap so an odd start time
     // (a synced activity, say) doesn't silently become :00 on save.
-    startM: [0,15,30,45].reduce((best, m) =>
-      Math.abs(m - b.start_min % 60) < Math.abs(best - b.start_min % 60) ? m : best, 0),
-    durMin: Math.max(15, (b.end_min - b.start_min) || 60),
+    startM: Math.min(55, Math.round((b.start_min % 60) / 5) * 5),
+    durMin: Math.max(5, (b.end_min - b.start_min) || 60),
     lane: b.lane || 'personal',
     offering: b.offering || '',
     prayer_tag: b.prayer_tag || '',
   };
   showAdd.value = true;
 }
+
+const DURATIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120];
+// Keep an edited block's own length selectable even when it isn't a preset step.
+const blockDurations = computed(() =>
+  [...new Set([...DURATIONS, Number(form.value.durMin)])].filter(Boolean).sort((a, b) => a - b));
+function durLabel(d){ return d < 60 ? `${d} min` : d % 60 ? `${Math.floor(d/60)} h ${d%60} min` : `${d/60} h`; }
 
 function cancelEdit(){ editingId.value = null; form.value = blank(); showAdd.value = false; }
 
@@ -316,8 +323,7 @@ onMounted(() => { load(); loadPresets(); });
           <option v-for="h in 24" :key="h-1" :value="h-1">{{ String(h-1).padStart(2,'0') }}:00</option>
         </select>
         <select class="field" style="width:auto" v-model.number="newPreset.startM">
-          <option :value="0">:00</option><option :value="15">:15</option>
-          <option :value="30">:30</option><option :value="45">:45</option>
+          <option v-for="m in minuteSteps" :key="m" :value="m">:{{ String(m).padStart(2,'0') }}</option>
         </select>
         <select class="field" style="width:auto" v-model.number="newPreset.dur_min">
           <option :value="5">5 min</option><option :value="10">10 min</option><option :value="15">15 min</option>
@@ -349,10 +355,10 @@ onMounted(() => { load(); loadPresets(); });
           <option v-for="h in hours" :key="h" :value="h">{{ String(h).padStart(2,'0') }}:00</option>
         </select>
         <select class="field" style="width:auto" v-model.number="form.startM">
-          <option :value="0">:00</option><option :value="15">:15</option><option :value="30">:30</option><option :value="45">:45</option>
+          <option v-for="m in minuteSteps" :key="m" :value="m">:{{ String(m).padStart(2,'0') }}</option>
         </select>
         <select class="field" style="width:auto" v-model.number="form.durMin">
-          <option :value="30">30 min</option><option :value="60">1 h</option><option :value="90">1.5 h</option><option :value="120">2 h</option>
+          <option v-for="d in blockDurations" :key="d" :value="d">{{ durLabel(d) }}</option>
         </select>
         <select class="field" style="width:auto" v-model="form.lane">
           <option value="farmerschoice">Farmers Choice</option>

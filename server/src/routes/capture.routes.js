@@ -29,7 +29,7 @@ function cleanPlan(data, domains) {
   const domainIds = new Set(domains.map(d => d.id));
   const tasks = Array.isArray(data?.tasks) ? data.tasks.slice(0, 10).map((t) => {
     const start = clampMinute(t.start_min, 9 * 60);
-    const dur = Math.max(10, Math.min(240, Number(t.dur_min) || 45));
+    const dur = Math.max(5, Math.min(240, Number(t.dur_min) || 45));
     return {
       title: String(t.title || '').trim().slice(0, 120),
       start_min: start,
